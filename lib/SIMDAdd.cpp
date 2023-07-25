@@ -1,5 +1,6 @@
-#include "llvm/IR/Function.h"
 #include "llvm/Pass.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
 
 using namespace llvm;
 
@@ -18,6 +19,19 @@ static RegisterPass<SIMDAdd> X("simd-add", "Map add instructions to SIMD DSPs",
 bool SIMDAdd::runOnFunction(Function &F) {
 	if (skipFunction(F))
 		return false;
+
+	for (auto &BB : F) {
+		// collect all the add instructions
+		std::vector<Instruction *> addInstrs;
+		for (auto &I : BB) {
+			if (auto *binOp = dyn_cast<BinaryOperator>(&I)) {
+				if (binOp->getOpcode() == Instruction::Add) {
+					errs() << "add instruction found\n";
+					addInstrs.push_back(binOp);
+				}
+			}
+		}
+	}
 
 	return false;
 }

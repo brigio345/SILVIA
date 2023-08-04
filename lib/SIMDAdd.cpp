@@ -106,30 +106,27 @@ Function *declareAddFunction(Function &F) {
 	Value *a = myAddFunc->arg_begin() + 0;
 	Value *b = myAddFunc->arg_begin() + 1;
 
-	Value *a0 = builder.CreateTrunc(builder.CreateLShr(a, 36), IntegerType::get(context, 12));
-	Value *a1 = builder.CreateTrunc(builder.CreateLShr(a, 24), IntegerType::get(context, 12));
-	Value *a2 = builder.CreateTrunc(builder.CreateLShr(a, 12), IntegerType::get(context, 12));
-	Value *a3 = builder.CreateTrunc(a, IntegerType::get(context, 12));
-	Value *b0 = builder.CreateTrunc(builder.CreateLShr(b, 36), IntegerType::get(context, 12));
-	Value *b1 = builder.CreateTrunc(builder.CreateLShr(b, 24), IntegerType::get(context, 12));
-	Value *b2 = builder.CreateTrunc(builder.CreateLShr(b, 12), IntegerType::get(context, 12));
-	Value *b3 = builder.CreateTrunc(b, IntegerType::get(context, 12));
+	Value *sum_concat;
+	for (int i = 0; i < 4; i++) {
+		int shift_amount = (12 * (3 - i));
+		Value *a_shifted = (shift_amount > 0) ?
+			builder.CreateLShr(a, shift_amount) : a;
+		Value *a_i = builder.CreateTrunc(a_shifted,
+				IntegerType::get(context, 12));
 
-	// Perform the addition
-	Value *sum0 = builder.CreateAdd(a0, b0);
-	Value *sum1 = builder.CreateAdd(a1, b1);
-	Value *sum2 = builder.CreateAdd(a2, b2);
-	Value *sum3 = builder.CreateAdd(a3, b3);
+		Value *b_shifted = (shift_amount > 0) ?
+			builder.CreateLShr(b, shift_amount) : b;
+		Value *b_i = builder.CreateTrunc(b_shifted,
+				IntegerType::get(context, 12));
 
-	Value *sum0_48 = builder.CreateSExt(sum0, IntegerType::get(context, 48));
-	Value *sum1_48 = builder.CreateSExt(sum1, IntegerType::get(context, 48));
-	Value *sum2_48 = builder.CreateSExt(sum2, IntegerType::get(context, 48));
-	Value *sum3_48 = builder.CreateSExt(sum3, IntegerType::get(context, 48));
+		Value *sum = builder.CreateAdd(a_i, b_i);
+		Value *sum_48 = builder.CreateSExt(sum, IntegerType::get(context, 48));
 
-	Value *sum_concat = builder.CreateShl(sum0_48, 36);
-	sum_concat = builder.CreateOr(sum_concat, builder.CreateShl(sum1_48, 24));
-	sum_concat = builder.CreateOr(sum_concat, builder.CreateShl(sum2_48, 12));
-	sum_concat = builder.CreateOr(sum_concat, sum3_48);
+		sum_concat = (shift_amount > 0) ?
+			builder.CreateShl(sum_48, shift_amount) :
+			sum_48;
+		sum_concat = builder.CreateOr(sum_concat, sum_48);
+	}
 
 	// Create the return instruction
 	builder.CreateRet(sum_concat);

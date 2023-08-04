@@ -1,0 +1,53 @@
+{
+  "c_function_name"     : "dsp_add_4simd_pipe_l0",
+  "rtl_top_module_name" : "dsp_add_4simd_pipe_l0",
+  "c_files" : [{ 
+    "c_file" : "../blackbox/dsp_add_simd.cc",
+    "cflag" : "-I../blackbox"
+  }],
+  "rtl_files" : [
+    "../blackbox/dsp_add_4simd_pipe_l0.v"
+  ],
+  "c_parameters" : [{
+    "c_name" : "a",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "a"
+    }
+  },
+  {
+    "c_name" : "b",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "b"
+    }
+  }],
+  "c_return" : {
+    "c_name": "ret", 
+    "c_port_direction" : "out",
+    "rtl_ports" : {
+      "data_write_out" : "ap_return"
+    }
+  },
+  "rtl_common_signal" : {
+    "module_clock"                    : "clk",
+    "module_reset"                    : "rst",
+    "module_clock_enable"             : "ce",
+    "ap_ctrl_chain_protocol_idle"     : "",
+    "ap_ctrl_chain_protocol_start"    : "",
+    "ap_ctrl_chain_protocol_ready"    : "",
+    "ap_ctrl_chain_protocol_done"     : "",
+    "ap_ctrl_chain_protocol_continue" : ""
+  },
+  "rtl_performance" : {
+    "latency" : "0",
+    "II"      : "1"
+  },
+  "rtl_resource_usage" : {
+    "FF"   :   "0",
+    "LUT"  :   "0",
+    "BRAM" :   "0",
+    "URAM" :   "0",
+    "DSP"  :   "1"
+  }
+}

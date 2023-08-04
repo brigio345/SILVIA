@@ -27,7 +27,7 @@ if { ![file exists $::env(HLS_LLVM_PLUGIN_DIR)/LLVMCustomPasses.so] } {
 }
 ### The following variable must be set before csynth_design
 # Do not use global namespace (::) for variables used in LVM_CUSTOM_CMD
-set ::LLVM_CUSTOM_CMD {$LLVM_CUSTOM_OPT -load $::env(HLS_LLVM_PLUGIN_DIR)/LLVMCustomPasses.so -reflow-infer-unroll -reflow-auto-loop-unroll -reflow-pragma-loop-unroll -reflow-loop-unroll -simd-add $LLVM_CUSTOM_INPUT -o $LLVM_CUSTOM_OUTPUT}
+set ::LLVM_CUSTOM_CMD {$LLVM_CUSTOM_OPT -load $::env(HLS_LLVM_PLUGIN_DIR)/LLVMCustomPasses.so -mem2reg -instcombine -reflow-infer-unroll -reflow-auto-loop-unroll -reflow-pragma-loop-unroll -reflow-loop-unroll -simd-add $LLVM_CUSTOM_INPUT -o $LLVM_CUSTOM_OUTPUT}
 
 # Open a project and remove any existing data
 open_project -reset proj
@@ -35,6 +35,7 @@ open_project -reset proj
 # Add kernel and testbench
 add_files hls_example.cpp
 add_files -tb hls_example.cpp
+add_files -blackbox ../blackbox/dsp_add_4simd_pipe_l0.json
 
 # Tell the top
 set_top example

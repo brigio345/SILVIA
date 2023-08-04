@@ -20,36 +20,56 @@
 //
 #include <iostream>
 
-constexpr size_t N = 50;
+#include <ap_int.h>
+
+constexpr size_t N = 128;
 
 using namespace std;
 
-void example(int a[N], int b[N]) {
+void example(uint8_t a[N], uint8_t b[N]) {
 #pragma HLS INTERFACE m_axi port = a depth = N
 #pragma HLS INTERFACE m_axi port = b depth = N
-  int buff[N];
-  for (size_t i = 0; i < N; ++i) {
+  for (size_t i = 0; i < N; i += 4) {
 #pragma HLS PIPELINE II = 1
-    buff[i] = a[i];
-    buff[i] = buff[i] + 100;
-    b[i] = buff[i];
+//#pragma HLS UNROLL factor = 4
+    const auto in0 = a[i + 0];
+    const auto in1 = a[i + 1];
+    const auto in2 = a[i + 2];
+    const auto in3 = a[i + 3];
+    const auto out0 = in0 + 1;
+    const auto out1 = in1 + in0;
+    const auto out2 = in2 + in0;
+    const auto out3 = in3 + in0;
+    b[i + 0] = out0;
+    b[i + 1] = out1;
+    b[i + 2] = out2;
+    b[i + 3] = out3;
   }
 }
 
 int main() {
-  int in[N], res[N];
+  uint8_t in[N], res[N];
   for (size_t i = 0; i < N; ++i) {
     in[i] = i;
   }
 
   example(in, res);
 
-  for (int i = 0; i < N; ++i)
-    if (res[i] != i + 100) {
-      cout << "Test failed.\n";
-      return 1;
+  int mismatch = 0;
+  for (uint8_t i = 0; i < N; i += 4) {
+  	if (res[i] != i + 1) {
+        cout << "Expected=" << int(i + 1) << " Got=" << int(res[i]) << endl;
+        mismatch++;
+	}
+    for (int j = 1; j < 4; j++) {
+      if (res[i + j] != i + j + i) {
+        //cout << "Expected=" << i + j + (j > 0 ? i : 1) << " Got=" << res[i] << endl;
+        cout << "Expected=" << int(i + j + i) << " Got=" << int(res[i + j]) << endl;
+        mismatch++;
+      }
     }
+  }
 
   cout << "Test passed.\n";
-  return 0;
+  return mismatch;
 }

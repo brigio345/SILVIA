@@ -20,31 +20,6 @@ static RegisterPass<SIMDAdd> X("simd-add", "Map add instructions to SIMD DSPs",
 		false /* Only looks at CFG */,
 		true /* Transformation Pass */);
 
-// TODO: Maybe use DominatorTree? (It may be an overkill)
-// DominatorTree DT(F);
-// if (DT.dominates(inst0, inst1)) {...}
-bool isBeforeInBB(Instruction *inst0, Instruction *inst1) {
-	if (inst0 == inst1)
-		return false;
-
-	// There is no ordering between instructions belonging to different basic blocks
-	if (inst0->getParent() != inst1->getParent())
-		return false;
-
-	for (auto &inst : *inst0->getParent()) {
-		// inst0 found before finding inst1
-		if (&inst == inst0)
-			return true;
-
-		// inst1 found before finding inst0
-		if (&inst == inst1)
-			return false;
-	}
-
-	// Execution should never reach here.
-	return false;
-}
-
 Instruction *getLastOperandDef(Instruction *inst, std::map<Instruction *, int> &instMap) {
 	Instruction *lastDef = nullptr;
 
@@ -158,6 +133,9 @@ bool SIMDAdd::runOnFunction(Function &F) {
 			}
 		}
 
+		// TODO: Maybe use DominatorTree? (It may be an overkill)
+		// DominatorTree DT(F);
+		// if (DT.dominates(inst0, inst1)) {...}
 		std::map<Instruction *, int> instMap;
 		for (auto &inst : BB.getInstList())
 			instMap[&inst] = (instMap.size() + 1);

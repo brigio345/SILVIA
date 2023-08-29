@@ -145,17 +145,14 @@ bool SIMDAdd::runOnFunction(Function &F) {
 		// TODO: check if a size of 8 is a good choice
 		SmallVector<SmallVector<Instruction *, 4>, 8> instTuples;
 		while (!simd4Candidates.empty()) {
-			auto *addInst = simd4Candidates.front();
-			simd4Candidates.pop_front();
-
 			SmallVector<Instruction *, 4> instTuple;
+			Instruction *lastDef = nullptr;
+			Instruction *firstUse = nullptr;
 
-			instTuple.push_back(cast<Instruction>(addInst));
+			for (auto i = 0; i < simd4Candidates.size(); i++) {
+				auto *addInstCurr = simd4Candidates.front();
+				simd4Candidates.pop_front();
 
-			auto *lastDef = getLastOperandDef(addInst, instMap);
-			auto *firstUse = getFirstValueUse(addInst, instMap);
-
-			for (auto *addInstCurr : simd4Candidates) {
 				auto *lastDefCurr = getLastOperandDef(addInstCurr, instMap);
 				auto *firstUseCurr = getFirstValueUse(addInstCurr, instMap);
 
@@ -167,9 +164,12 @@ bool SIMDAdd::runOnFunction(Function &F) {
 					firstUse = firstUseCurr;
 
 				// If firstUse is before lastDef this pair of
-				// instructions is not compatible for optimization
-				if (firstUse && (instMap[firstUse] < instMap[lastDef]))
+				// instructions is not compatible with current
+				// tuple.
+				if (firstUse && (instMap[firstUse] < instMap[lastDef])) {
+					simd4Candidates.push_back(addInstCurr);
 					continue;
+				}
 
 				instTuple.push_back(addInstCurr);
 
@@ -177,11 +177,6 @@ bool SIMDAdd::runOnFunction(Function &F) {
 					break;
 			}
 
-			for (auto inst : instTuple) {
-				simd4Candidates.erase(std::remove(simd4Candidates.begin(),
-						simd4Candidates.end(), inst),
-						simd4Candidates.end());
-			}
 			instTuples.push_back(instTuple);
 		}
 

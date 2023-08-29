@@ -5,7 +5,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/DenseMap.h"
 
-#include <list>
+#include <queue>
 
 using namespace llvm;
 
@@ -120,12 +120,12 @@ bool SIMDAdd::runOnFunction(Function &F) {
 
 	for (auto &BB : F) {
 		// collect all the add instructions
-		std::list<Instruction *> simd4Candidates;
+		std::queue<Instruction *> simd4Candidates;
 		for (auto &I : BB) {
 			if (auto *binOp = dyn_cast<BinaryOperator>(&I)) {
 				if (binOp->getOpcode() == Instruction::Add) {
 					if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 12)
-						simd4Candidates.push_back(binOp);
+						simd4Candidates.push(binOp);
 					// TODO: collect candidates for simd2
 					// else if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 24)
 						// simd2Candidates.push_back(binOp);
@@ -151,7 +151,7 @@ bool SIMDAdd::runOnFunction(Function &F) {
 
 			for (auto i = 0; i < simd4Candidates.size(); i++) {
 				auto *addInstCurr = simd4Candidates.front();
-				simd4Candidates.pop_front();
+				simd4Candidates.pop();
 
 				auto *lastDefCurr = getLastOperandDef(addInstCurr, instMap);
 				auto *firstUseCurr = getFirstValueUse(addInstCurr, instMap);
@@ -167,7 +167,7 @@ bool SIMDAdd::runOnFunction(Function &F) {
 				// instructions is not compatible with current
 				// tuple.
 				if (firstUse && (instMap[firstUse] < instMap[lastDef])) {
-					simd4Candidates.push_back(addInstCurr);
+					simd4Candidates.push(addInstCurr);
 					continue;
 				}
 

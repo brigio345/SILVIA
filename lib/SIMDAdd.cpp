@@ -177,7 +177,9 @@ bool SIMDAdd::runOnFunction(Function &F) {
 					break;
 			}
 
-			instTuples.push_back(instTuple);
+			// TODO: maybe also skip tuples of size 2?
+			if (instTuple.size() > 1)
+				instTuples.push_back(instTuple);
 		}
 
 		Function *myAddFunc = nullptr;
@@ -189,10 +191,6 @@ bool SIMDAdd::runOnFunction(Function &F) {
 		}
 
 		for (auto instTuple : instTuples) {
-			// TODO: maybe also skip tuples of size 2?
-			if (instTuple.size() < 2)
-				continue;
-
 			IRBuilder<> builder(instTuple[0]);
 
 			Value *args[2];

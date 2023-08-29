@@ -2,9 +2,10 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/DenseMap.h"
 
 #include <list>
-#include <map>
 
 using namespace llvm;
 
@@ -20,7 +21,7 @@ static RegisterPass<SIMDAdd> X("simd-add", "Map add instructions to SIMD DSPs",
 		false /* Only looks at CFG */,
 		true /* Transformation Pass */);
 
-Instruction *getLastOperandDef(Instruction *inst, std::map<Instruction *, int> &instMap) {
+Instruction *getLastOperandDef(Instruction *inst, DenseMap<Instruction *, int> &instMap) {
 	Instruction *lastDef = nullptr;
 
 	for (auto &op : inst->operands()) {
@@ -33,7 +34,7 @@ Instruction *getLastOperandDef(Instruction *inst, std::map<Instruction *, int> &
 	return lastDef;
 }
 
-Instruction *getFirstValueUse(Instruction *inst, std::map<Instruction *, int> &instMap) {
+Instruction *getFirstValueUse(Instruction *inst, DenseMap<Instruction *, int> &instMap) {
 	Instruction *firstUse = nullptr;
 
 	for (User *user : inst->users()) {
@@ -50,10 +51,9 @@ Function *declareAddFunction(Function &F) {
 	LLVMContext &context = F.getContext();
 
 	// Create the function type for add_4simd: i48 (i48, i48)
-	std::vector<Type*> paramTypes = {IntegerType::get(context, 48),
-		IntegerType::get(context, 48)};
 	FunctionType *myAddType = FunctionType::get(IntegerType::get(context, 48),
-			paramTypes, false);
+			{IntegerType::get(context, 48), IntegerType::get(context, 48)},
+			false);
 
 	// Create the function declaration for myAdd
 	Function *myAddFunc = Function::Create(myAddType,
@@ -136,18 +136,19 @@ bool SIMDAdd::runOnFunction(Function &F) {
 		// TODO: Maybe use DominatorTree? (It may be an overkill)
 		// DominatorTree DT(F);
 		// if (DT.dominates(inst0, inst1)) {...}
-		std::map<Instruction *, int> instMap;
+		DenseMap<Instruction *, int> instMap;
 		for (auto &inst : BB.getInstList())
 			instMap[&inst] = (instMap.size() + 1);
 
 		// Build tuples of 4 instructions that can be mapped to the
 		// same SIMD DSP.
-		std::vector<std::vector<Instruction *>> instTuples;
+		// TODO: check if a size of 8 is a good choice
+		SmallVector<SmallVector<Instruction *, 4>, 8> instTuples;
 		while (!simd4Candidates.empty()) {
 			auto *addInst = simd4Candidates.front();
 			simd4Candidates.pop_front();
 
-			std::vector<Instruction *> instTuple;
+			SmallVector<Instruction *, 4> instTuple;
 
 			instTuple.push_back(cast<Instruction>(addInst));
 

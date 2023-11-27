@@ -1,7 +1,8 @@
+#include "llvm/Module.h"
 #include "llvm/Pass.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/IRBuilder.h"
+#include "llvm/Function.h"
+#include "llvm/Instructions.h"
+#include "llvm/Support/IRBuilder.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/DenseMap.h"
 
@@ -13,7 +14,7 @@ struct SIMDAdd : public FunctionPass {
 	static char ID;
 	SIMDAdd() : FunctionPass(ID) {}
 
-	bool runOnFunction(Function &F) override;
+	bool runOnFunction(Function &F);
 };
 
 char SIMDAdd::ID = 0;
@@ -22,9 +23,10 @@ static RegisterPass<SIMDAdd> X("simd-add", "Map add instructions to SIMD DSPs",
 		true /* Transformation Pass */);
 
 Instruction *getLastOperandDef(Instruction *inst, DenseMap<Instruction *, int> &instMap) {
-	Instruction *lastDef = nullptr;
+	Instruction *lastDef = NULL;
 
-	for (auto &op : inst->operands()) {
+	for (unsigned int i  = 0; i < inst->getNumOperands(); i++) {
+		Value *op = inst->getOperand(i);
 		if (Instruction *opInst = dyn_cast<Instruction>(op)) {
 			if ((!lastDef) || (instMap[lastDef] < instMap[opInst]))
 				lastDef = opInst;
@@ -35,9 +37,10 @@ Instruction *getLastOperandDef(Instruction *inst, DenseMap<Instruction *, int> &
 }
 
 Instruction *getFirstValueUse(Instruction *inst, DenseMap<Instruction *, int> &instMap) {
-	Instruction *firstUse = nullptr;
+	Instruction *firstUse = NULL;
 
-	for (User *user : inst->users()) {
+	for (Value::use_iterator UI = inst->use_begin(), UE = inst->use_end(); UI != UE; ++UI) {
+		Value *user = *UI;
 		if (Instruction *userInst = dyn_cast<Instruction>(user)) {
 			if ((!firstUse) || (instMap[userInst] < instMap[firstUse]))
 				firstUse = userInst;
@@ -51,9 +54,12 @@ Function *declareAddFunction(Function &F) {
 	LLVMContext &context = F.getContext();
 
 	// Create the function type for add_4simd: i48 (i48, i48)
-	FunctionType *myAddType = FunctionType::get(IntegerType::get(context, 48),
-			{IntegerType::get(context, 48), IntegerType::get(context, 48)},
-			false);
+	SmallVector<Type *, 2> argsIn;
+	argsIn.push_back(IntegerType::getIntNTy(context, 48));
+	argsIn.push_back(IntegerType::getIntNTy(context, 48));
+	FunctionType *myAddType = FunctionType::get(
+			IntegerType::getIntNTy(context, 48),
+			argsIn, false);
 
 	// Create the function declaration for myAdd
 	Function *myAddFunc = Function::Create(myAddType,
@@ -64,12 +70,17 @@ Function *declareAddFunction(Function &F) {
 	// return true. Therefore, it prevents from recursively replace
 	// the add instruction within myAddFunc.
 	// OptimizeNone requires the NoInline attribute.
+	//FIXME: check if LLVM 3.1 provides alternatives to skipFunction
 	myAddFunc->addFnAttr(Attribute::NoInline);
-	myAddFunc->addFnAttr(Attribute::OptimizeNone);
+	//myAddFunc->addFnAttr(Attribute::OptimizeNone);
 
 	// Set names for the function parameters
-	(myAddFunc->arg_begin() + 0)->setName("a");
-	(myAddFunc->arg_begin() + 1)->setName("b");
+	Function::arg_iterator argIt = myAddFunc->arg_begin();
+	Value *tmp = argIt;
+	tmp->setName("a");
+	argIt++;
+	tmp = argIt;
+	tmp->setName("b");
 
 	// Create a new basic block to hold the function body
 	BasicBlock *entryBB = BasicBlock::Create(context, "entry", myAddFunc);
@@ -78,8 +89,10 @@ Function *declareAddFunction(Function &F) {
 	IRBuilder<> builder(entryBB);
 
 	// Get the function arguments
-	Value *a = myAddFunc->arg_begin() + 0;
-	Value *b = myAddFunc->arg_begin() + 1;
+	argIt = myAddFunc->arg_begin();
+	Value *a = argIt;
+	argIt++;
+	Value *b = argIt;
 
 	Value *sum_concat;
 	for (int i = 0; i < 4; i++) {
@@ -110,7 +123,9 @@ Function *declareAddFunction(Function &F) {
 }
 
 bool SIMDAdd::runOnFunction(Function &F) {
-	if (skipFunction(F))
+	//FIXME: check if LLVM 3.1 provides alternatives to skipFunction
+	//if (skipFunction(F))
+	if (F.getName().startswith("_ssdm_op") || F.getName() == "dsp_add_4simd_pipe_l0")
 		return false;
 
 	// Get the LLVM context
@@ -118,18 +133,18 @@ bool SIMDAdd::runOnFunction(Function &F) {
 
 	bool modified = false;
 
-	for (auto &BB : F) {
+	for (Function::iterator FI = F.begin(), FE = F.end(); FI != FE; ++FI) {
+		BasicBlock &BB = *FI;
 		// collect all the add instructions
 		std::queue<Instruction *> simd4Candidates;
-		for (auto &I : BB) {
-			if (auto *binOp = dyn_cast<BinaryOperator>(&I)) {
-				if (binOp->getOpcode() == Instruction::Add) {
-					if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 12)
-						simd4Candidates.push(binOp);
-					// TODO: collect candidates for simd2
-					// else if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 24)
-						// simd2Candidates.push_back(binOp);
-				}
+		for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI) {
+			Instruction *I = BI;
+			if (I->getOpcode() == Instruction::Add) {
+				if (cast<IntegerType>(I->getType())->getBitWidth() <= 12)
+					simd4Candidates.push(I);
+				// TODO: collect candidates for simd2
+				// else if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 24)
+					// simd2Candidates.push_back(binOp);
 			}
 		}
 
@@ -137,8 +152,10 @@ bool SIMDAdd::runOnFunction(Function &F) {
 		// DominatorTree DT(F);
 		// if (DT.dominates(inst0, inst1)) {...}
 		DenseMap<Instruction *, int> instMap;
-		for (auto &inst : BB.getInstList())
-			instMap[&inst] = (instMap.size() + 1);
+		for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI) {
+			Instruction *inst = BI;
+			instMap[inst] = (instMap.size() + 1);
+		}
 
 		// Build tuples of 4 instructions that can be mapped to the
 		// same SIMD DSP.
@@ -146,15 +163,15 @@ bool SIMDAdd::runOnFunction(Function &F) {
 		SmallVector<SmallVector<Instruction *, 4>, 8> instTuples;
 		while (!simd4Candidates.empty()) {
 			SmallVector<Instruction *, 4> instTuple;
-			Instruction *lastDef = nullptr;
-			Instruction *firstUse = nullptr;
+			Instruction *lastDef = NULL;
+			Instruction *firstUse = NULL;
 
-			for (auto i = 0; i < simd4Candidates.size(); i++) {
-				auto *addInstCurr = simd4Candidates.front();
+			for (unsigned i = 0; i < simd4Candidates.size(); i++) {
+				Instruction *addInstCurr = simd4Candidates.front();
 				simd4Candidates.pop();
 
-				auto *lastDefCurr = getLastOperandDef(addInstCurr, instMap);
-				auto *firstUseCurr = getFirstValueUse(addInstCurr, instMap);
+				Instruction *lastDefCurr = getLastOperandDef(addInstCurr, instMap);
+				Instruction *firstUseCurr = getFirstValueUse(addInstCurr, instMap);
 
 				// Update with tuple worst case
 				if ((!lastDef) || (lastDefCurr && (instMap[lastDef] < instMap[lastDefCurr])))
@@ -182,20 +199,22 @@ bool SIMDAdd::runOnFunction(Function &F) {
 				instTuples.push_back(instTuple);
 		}
 
-		Function *myAddFunc = nullptr;
+		Function *myAddFunc = NULL;
 		if (!instTuples.empty()) {
 			// Check if the add_4simd function already exists in the current module
-			myAddFunc = F.getParent()->getFunction("dsp_add_4simd_pipe_l0");
+			Module *module = F.getParent();
+			myAddFunc = module->getFunction("dsp_add_4simd_pipe_l0");
 			if (!myAddFunc)
 				myAddFunc = declareAddFunction(F);
 		}
 
-		for (auto instTuple : instTuples) {
+		for (unsigned i = 0; i < instTuples.size(); i++) {
+			SmallVector<Instruction *, 4> instTuple = instTuples[i];
 			IRBuilder<> builder(instTuple[0]);
 
 			Value *args[2];
-			for (int j = 0; j < 2; j++) {
-				for (int i = 0; i < instTuple.size(); i++) {
+			for (unsigned j = 0; j < 2; j++) {
+				for (unsigned i = 0; i < instTuple.size(); i++) {
 					Value *arg = builder.CreateSExt(instTuple[i]->getOperand(j), IntegerType::get(context, 48));
 					int shift_amount = (12 * (3 - i));
 					if (shift_amount > 0) {
@@ -209,7 +228,7 @@ bool SIMDAdd::runOnFunction(Function &F) {
 			Value *sum_concat = builder.CreateCall(myAddFunc, args);
 
 			Value *result[4];
-			for (int i = 0; i < instTuple.size(); i++) {
+			for (unsigned i = 0; i < instTuple.size(); i++) {
 				int shift_amount = (12 * (3 - i));
 				Value *result_shifted = (shift_amount > 0) ?
 					builder.CreateLShr(sum_concat, shift_amount) : sum_concat;
@@ -219,7 +238,7 @@ bool SIMDAdd::runOnFunction(Function &F) {
 			}
 
 			// Replace the add instruction with the result
-			for (int i = 0; i < instTuple.size(); i++) {
+			for (unsigned i = 0; i < instTuple.size(); i++) {
 				instTuple[i]->replaceAllUsesWith(result[i]);
 				instTuple[i]->eraseFromParent();
 			}

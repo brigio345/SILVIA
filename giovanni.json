@@ -1,0 +1,67 @@
+{
+  "c_function_name"     : "giovanni",
+  "rtl_top_module_name" : "giovanni",
+  "c_files" : [{ 
+    "c_file" : "giovanni.cc",
+    "cflag" : ""
+  }],
+  "rtl_files" : [
+    "giovanni.v"
+  ],
+  "c_parameters" : [{
+    "c_name" : "a0",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "a0"
+    }
+  },
+  {
+    "c_name" : "a1",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "a1"
+    }
+  },
+  {
+    "c_name" : "b0",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "b0"
+    }
+  },
+  {
+    "c_name" : "b1",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "b1"
+    }
+  }],
+  "c_return" : {
+    "c_name": "ret", 
+    "c_port_direction" : "out",
+    "rtl_ports" : {
+      "data_write_out" : "ap_return"
+    }
+  },
+  "rtl_common_signal" : {
+    "module_clock"                    : "ap_clk",
+    "module_reset"                    : "ap_rst",
+    "module_clock_enable"             : "ap_ce",
+    "ap_ctrl_chain_protocol_idle"     : "",
+    "ap_ctrl_chain_protocol_start"    : "",
+    "ap_ctrl_chain_protocol_ready"    : "",
+    "ap_ctrl_chain_protocol_done"     : "",
+    "ap_ctrl_chain_protocol_continue" : ""
+  },
+  "rtl_performance" : {
+    "latency" : "2",
+    "II"      : "1"
+  },
+  "rtl_resource_usage" : {
+    "FF"   :   "0",
+    "LUT"  :   "0",
+    "BRAM" :   "0",
+    "URAM" :   "0",
+    "DSP"  :   "1"
+  }
+}

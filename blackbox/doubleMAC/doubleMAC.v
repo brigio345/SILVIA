@@ -44,11 +44,11 @@ endmodule
 
 `timescale 1 ns / 1 ps
 
-module doubleMAC(
+module _doubleMAC(
   input clk,
   input rst,
-  input clk_x2, 
-  input rst_x2, 
+  input clk2x, 
+  input rst2x, 
   input ce,
   input  [27-1:0] a0, a1,
   input  [18-1:0] b0, b1,
@@ -60,9 +60,9 @@ module doubleMAC(
   wire  [18-1:0] _b0, _b1;
   wire  [48-1:0] _c0, _c1;
 
-  reg [27-1:0] a1Reg;
-  reg [18-1:0] b1Reg;
-  reg [48-1:0] c1Reg;
+  reg [27-1:0] a0Reg, a1Reg;
+  reg [18-1:0] b0Reg, b1Reg;
+  reg [48-1:0] c0Reg, c1Reg;
   reg [48-1:0] dout0Reg, dout1Reg;
 
   wire [27-1:0] aDSP;
@@ -70,20 +70,32 @@ module doubleMAC(
   wire [48-1:0] cDSP;
   wire [48-1:0] doutDSP;
 
+  always @(posedge clk) begin
+    if (ce) begin
+      a0Reg <= a0;
+      b0Reg <= b0;
+      c0Reg <= c0;
+
+      a1Reg <= a1;
+      b1Reg <= b1;
+      c1Reg <= c1;
+    end 
+  end
+
   assign aDSP = clk ? a0 : a1; 
   assign bDSP = clk ? b0 : b1; 
   assign cDSP = clk ? c0 : c1; 
 
   mac_DSP mac_DSP_instance (
-    .clk(clk_x2),
-    .rst(rst_x2),
+    .clk(clk2x),
+    .rst(rst2x),
     .ce(ce), 
     .din0(aDSP),
     .din1(bDSP),
     .din2(cDSP),
     .dout(doutDSP));
 
-  always @(posedge clk_x2) begin: dout0_reg
+  always @(posedge clk2x) begin: dout0_reg
     if (ce && ~clk)
       dout0Reg <= doutDSP;
     if (ce && clk) 
@@ -95,5 +107,36 @@ module doubleMAC(
 
 endmodule
 
+////////////////////////////////////////////////////////////////////////////////
 
+`timescale 1 ns / 1 ps
 
+module doubleMAC(
+  input ap_clk,
+  input ap_rst,
+  input ap_ce,
+  input ap_clk2x, 
+  input  [27-1:0] a0, a1,
+  input  [18-1:0] b0, b1,
+  input  [48-1:0] c0, c1,
+  output [96-1:0] ap_return);
+
+wire [48-1:0] dout0, dout1;
+assign ap_return = {dout0, dout1};
+
+_doubleMAC doubleMAC_u(
+  .clk(ap_clk),
+  .rst(ap_rst),
+  .ce(ap_ce),
+  .clk2x(ap_clk2x),
+  .rst2x(ap_rst),
+  .a0(a0),
+  .b0(b0),
+  .c0(c0),
+  .a1(a1),
+  .b1(b1),
+  .c1(c1),
+  .dout0(dout0),
+  .dout1(dout1));
+
+endmodule

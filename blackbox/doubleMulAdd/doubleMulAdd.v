@@ -1,6 +1,6 @@
 `timescale 1 ns / 1 ps
 
-(* use_dsp = "yes" *) (* dont_touch = "yes" *) module mac_DSP(
+(* use_dsp = "yes" *) (* dont_touch = "yes" *) module muladd_DSP(
     input clk,
     input rst,
     input ce,
@@ -69,7 +69,7 @@ module _doubleMulAdd_cosim(
   assign dout0 = cePiped ? dout0DSP : dout0BakReg;
   assign dout1 = cePiped ? dout1DSP : dout1BakReg;
 
-  mac_DSP mac_DSP_0(
+  muladd_DSP muladd_DSP_0(
     .clk(clk),
     .rst(rst),
     .ce(cePiped), 
@@ -78,7 +78,7 @@ module _doubleMulAdd_cosim(
     .din2(c0Reg[1]),
     .dout(dout0DSP));
 
-  mac_DSP mac_DSP_1(
+  muladd_DSP muladd_DSP_1(
     .clk(clk),
     .rst(rst),
     .ce(cePiped), 
@@ -180,7 +180,7 @@ module _doubleMulAdd(
   assign dout1 = cePiped ? dout0RegSlow : dout0RegBak;
   assign dout0 = cePiped ? dout1RegSlow : dout1RegBak;
 
-  mac_DSP mac_DSP_instance (
+  muladd_DSP muladd_DSP_instance (
     .clk(clk2x),
     .rst(rst2x),
     .ce(cePiped), 

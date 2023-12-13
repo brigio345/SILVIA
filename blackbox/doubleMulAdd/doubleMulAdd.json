@@ -1,14 +1,15 @@
 {
-  "c_function_name"     : "doubleMAC",
-  "rtl_top_module_name" : "doubleMAC",
+  "c_function_name"     : "doubleMulAdd",
+  "rtl_top_module_name" : "doubleMulAdd",
   "c_files" : [{ 
-    "c_file" : "doubleMAC.cpp",
+    "c_file" : "doubleMulAdd.cpp",
     "cflag" : ""
   }],
   "rtl_files" : [
-    "doubleMAC.v"
+    "doubleMulAdd.v"
   ],
-  "c_parameters" : [{
+  "c_parameters" : [
+  {
     "c_name" : "ap_clk2x",
     "c_port_direction" : "in",
     "rtl_ports" : {
@@ -75,7 +76,7 @@
     "ap_ctrl_chain_protocol_continue" : ""
   },
   "rtl_performance" : {
-    "latency" : "3",
+    "latency" : "5",
     "II"      : "1"
   },
   "rtl_resource_usage" : {

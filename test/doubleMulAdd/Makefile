@@ -22,3 +22,8 @@ update_ip:
 	rm -r hls-ip
 	mkdir hls-ip && cp proj_vitis/solution1/impl/export.zip hls-ip/export.zip \
 		&& cd hls-ip && unzip export.zip
+
+clean:
+	if [ -d hls-ip ]; then rm -r hls-ip; fi
+	if [ -d proj_vitis ]; then rm -r proj_vitis; fi
+	if [ -f vitis_hls.log ]; then rm vitis_hls.log; fi

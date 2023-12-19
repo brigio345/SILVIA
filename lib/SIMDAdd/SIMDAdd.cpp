@@ -50,78 +50,6 @@ Instruction *getFirstValueUse(Instruction *inst, DenseMap<Instruction *, int> &i
 	return firstUse;
 }
 
-Function *declareAddFunction(Function &F) {
-	LLVMContext &context = F.getContext();
-
-	// Create the function type for add_4simd: i48 (i48, i48)
-	SmallVector<Type *, 2> argsIn;
-	argsIn.push_back(IntegerType::getIntNTy(context, 48));
-	argsIn.push_back(IntegerType::getIntNTy(context, 48));
-	FunctionType *myAddType = FunctionType::get(
-			IntegerType::getIntNTy(context, 48),
-			argsIn, false);
-
-	// Create the function declaration for myAdd
-	Function *myAddFunc = Function::Create(myAddType,
-			Function::ExternalLinkage, "dsp_add_4simd_pipe_l0",
-			F.getParent());
-
-	// The OptimizeNone attribute makes skipFunction(*myAddFunc)
-	// return true. Therefore, it prevents from recursively replace
-	// the add instruction within myAddFunc.
-	// OptimizeNone requires the NoInline attribute.
-	//FIXME: check if LLVM 3.1 provides alternatives to skipFunction
-	myAddFunc->addFnAttr(Attribute::NoInline);
-	//myAddFunc->addFnAttr(Attribute::OptimizeNone);
-
-	// Set names for the function parameters
-	Function::arg_iterator argIt = myAddFunc->arg_begin();
-	Value *tmp = argIt;
-	tmp->setName("a");
-	argIt++;
-	tmp = argIt;
-	tmp->setName("b");
-
-	// Create a new basic block to hold the function body
-	BasicBlock *entryBB = BasicBlock::Create(context, "entry", myAddFunc);
-
-	// Set the insertion point to the new basic block
-	IRBuilder<> builder(entryBB);
-
-	// Get the function arguments
-	argIt = myAddFunc->arg_begin();
-	Value *a = argIt;
-	argIt++;
-	Value *b = argIt;
-
-	Value *sum_concat;
-	for (int i = 0; i < 4; i++) {
-		int shift_amount = (12 * (3 - i));
-		Value *a_shifted = (shift_amount > 0) ?
-			builder.CreateLShr(a, shift_amount) : a;
-		Value *a_i = builder.CreateTrunc(a_shifted,
-				IntegerType::get(context, 12));
-
-		Value *b_shifted = (shift_amount > 0) ?
-			builder.CreateLShr(b, shift_amount) : b;
-		Value *b_i = builder.CreateTrunc(b_shifted,
-				IntegerType::get(context, 12));
-
-		Value *sum = builder.CreateAdd(a_i, b_i);
-		Value *sum_48 = builder.CreateSExt(sum, IntegerType::get(context, 48));
-
-		sum_concat = (shift_amount > 0) ?
-			builder.CreateShl(sum_48, shift_amount) :
-			sum_48;
-		sum_concat = builder.CreateOr(sum_concat, sum_48);
-	}
-
-	// Create the return instruction
-	builder.CreateRet(sum_concat);
-
-	return myAddFunc;
-}
-
 bool SIMDAdd::runOnFunction(Function &F) {
 	//FIXME: check if LLVM 3.1 provides alternatives to skipFunction
 	//if (skipFunction(F))
@@ -205,7 +133,7 @@ bool SIMDAdd::runOnFunction(Function &F) {
 			Module *module = F.getParent();
 			myAddFunc = module->getFunction("dsp_add_4simd_pipe_l0");
 			if (!myAddFunc)
-				myAddFunc = declareAddFunction(F);
+				throw "dsp_add_4simd_pipe_l0 not found";
 		}
 
 		for (unsigned i = 0; i < instTuples.size(); i++) {

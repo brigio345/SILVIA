@@ -63,6 +63,12 @@ bool SIMDAdd::runOnFunction(Function &F) {
   // Get the LLVM context
   LLVMContext &context = F.getContext();
 
+  // Get the SIMD function
+  Module *module = F.getParent();
+  Function *myAddFunc = module->getFunction("dsp_add_4simd_pipe_l0");
+  if (!myAddFunc)
+    throw "Function dsp_add_4simd_pipe_l0 not found";
+
   bool modified = false;
 
   for (Function::iterator FI = F.begin(), FE = F.end(); FI != FE; ++FI) {
@@ -131,15 +137,6 @@ bool SIMDAdd::runOnFunction(Function &F) {
       // TODO: maybe also skip tuples of size 2?
       if (instTuple.size() > 1)
         instTuples.push_back(instTuple);
-    }
-
-    Function *myAddFunc = NULL;
-    if (!instTuples.empty()) {
-      // Check if the add_4simd function already exists in the current module
-      Module *module = F.getParent();
-      myAddFunc = module->getFunction("dsp_add_4simd_pipe_l0");
-      if (!myAddFunc)
-        throw "dsp_add_4simd_pipe_l0 not found";
     }
 
     for (unsigned i = 0; i < instTuples.size(); i++) {

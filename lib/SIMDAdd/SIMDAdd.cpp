@@ -92,7 +92,7 @@ bool SIMDAdd::runOnFunction(Function &F) {
     DenseMap<Instruction *, int> instMap;
     for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI) {
       Instruction *inst = BI;
-      instMap[inst] = (instMap.size() + 1);
+      instMap[inst] = instMap.size();
     }
 
     // Build tuples of 4 instructions that can be mapped to the

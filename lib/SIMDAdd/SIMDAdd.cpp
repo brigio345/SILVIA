@@ -98,7 +98,6 @@ bool SIMDAdd::runOnFunction(Function &F) {
     // Build tuples of 4 instructions that can be mapped to the
     // same SIMD DSP.
     // TODO: check if a size of 8 is a good choice
-    SmallVector<SmallVector<Instruction *, 4>, 8> instTuples;
     while (!simd4Candidates.empty()) {
       SmallVector<Instruction *, 4> instTuple;
       Instruction *lastDef = NULL;
@@ -135,13 +134,11 @@ bool SIMDAdd::runOnFunction(Function &F) {
       }
 
       // TODO: maybe also skip tuples of size 2?
-      if (instTuple.size() > 1)
-        instTuples.push_back(instTuple);
-    }
+      if (instTuple.size() < 2)
+        continue;
 
-    for (unsigned i = 0; i < instTuples.size(); i++) {
-      SmallVector<Instruction *, 4> instTuple = instTuples[i];
-      IRBuilder<> builder(instTuple[0]);
+      modified = true;
+      IRBuilder<> builder(firstUse);
 
       Value *args[2];
       for (unsigned j = 0; j < 2; j++) {
@@ -177,8 +174,6 @@ bool SIMDAdd::runOnFunction(Function &F) {
         instTuple[i]->eraseFromParent();
       }
     }
-
-    modified |= !(instTuples.empty());
   }
 
   return modified;

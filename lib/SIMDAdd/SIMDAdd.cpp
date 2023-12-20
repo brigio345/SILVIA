@@ -54,27 +54,9 @@ Instruction *getFirstValueUse(Instruction *inst,
   return firstUse;
 }
 
-bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
-  // FIXME: check if LLVM 3.1 provides alternatives to skipFunction
-  // if (skipFunction(F))
-  Function *F = BB.getParent();
-  if (F->getName().startswith("_ssdm_op") ||
-      F->getName() == "dsp_add_4simd_pipe_l0")
-    return false;
-
-  // Get the LLVM context
-  LLVMContext &context = F->getContext();
-
-  // Get the SIMD function
-  Module *module = F->getParent();
-  Function *myAddFunc = module->getFunction("dsp_add_4simd_pipe_l0");
-  if (!myAddFunc)
-    throw "Function dsp_add_4simd_pipe_l0 not found";
-
-  bool modified = false;
-
-  // collect all the add instructions
-  std::queue<Instruction *> simd4Candidates;
+// Collect all the add instructions.
+void getSIMDableInstructions(BasicBlock &BB,
+                             std::queue<Instruction *> &simd4Candidates) {
   for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI) {
     Instruction *I = BI;
     if (I->getOpcode() == Instruction::Add) {
@@ -85,6 +67,67 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       // simd2Candidates.push_back(binOp);
     }
   }
+}
+
+void replaceAddsWithSIMDCall(SmallVector<Instruction *, 4> instTuple,
+                             Instruction *insertBefore, Function *myAddFunc,
+                             LLVMContext &context) {
+  IRBuilder<> builder(insertBefore);
+
+  Value *args[2];
+  for (unsigned j = 0; j < 2; j++) {
+    for (unsigned i = 0; i < instTuple.size(); i++) {
+      Value *arg = builder.CreateSExt(instTuple[i]->getOperand(j),
+                                      IntegerType::get(context, 48));
+      int shift_amount = (12 * (3 - i));
+      if (shift_amount > 0) {
+        arg = builder.CreateShl(
+            builder.CreateSExt(arg, IntegerType::get(context, 48)),
+            shift_amount);
+      }
+      args[j] = (i > 0) ? builder.CreateOr(args[j], arg) : arg;
+    }
+  }
+
+  Value *sum_concat = builder.CreateCall(myAddFunc, args);
+
+  Value *result[4];
+  for (unsigned i = 0; i < instTuple.size(); i++) {
+    int shift_amount = (12 * (3 - i));
+    Value *result_shifted = (shift_amount > 0)
+                                ? builder.CreateLShr(sum_concat, shift_amount)
+                                : sum_concat;
+
+    result[i] = builder.CreateTrunc(result_shifted, instTuple[i]->getType());
+  }
+
+  // Replace the add instruction with the result
+  for (unsigned i = 0; i < instTuple.size(); i++) {
+    instTuple[i]->replaceAllUsesWith(result[i]);
+    instTuple[i]->eraseFromParent();
+  }
+}
+
+bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
+  // FIXME: check if LLVM 3.1 provides alternatives to skipFunction
+  // if (skipFunction(F))
+  Function *F = BB.getParent();
+  if (F->getName().startswith("_ssdm_op") ||
+      F->getName() == "dsp_add_4simd_pipe_l0")
+    return false;
+
+  // Get the SIMD function
+  Module *module = F->getParent();
+  Function *myAddFunc = module->getFunction("dsp_add_4simd_pipe_l0");
+  if (!myAddFunc)
+    throw "Function dsp_add_4simd_pipe_l0 not found";
+
+  LLVMContext &context = F->getContext();
+
+  bool modified = false;
+
+  std::queue<Instruction *> simd4Candidates;
+  getSIMDableInstructions(BB, simd4Candidates);
 
   // TODO: Maybe use DominatorTree? (It may be an overkill)
   // DominatorTree DT(F);
@@ -137,41 +180,8 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     if (instTuple.size() < 2)
       continue;
 
+    replaceAddsWithSIMDCall(instTuple, firstUse, myAddFunc, context);
     modified = true;
-    IRBuilder<> builder(firstUse);
-
-    Value *args[2];
-    for (unsigned j = 0; j < 2; j++) {
-      for (unsigned i = 0; i < instTuple.size(); i++) {
-        Value *arg = builder.CreateSExt(instTuple[i]->getOperand(j),
-                                        IntegerType::get(context, 48));
-        int shift_amount = (12 * (3 - i));
-        if (shift_amount > 0) {
-          arg = builder.CreateShl(
-              builder.CreateSExt(arg, IntegerType::get(context, 48)),
-              shift_amount);
-        }
-        args[j] = (i > 0) ? builder.CreateOr(args[j], arg) : arg;
-      }
-    }
-
-    Value *sum_concat = builder.CreateCall(myAddFunc, args);
-
-    Value *result[4];
-    for (unsigned i = 0; i < instTuple.size(); i++) {
-      int shift_amount = (12 * (3 - i));
-      Value *result_shifted = (shift_amount > 0)
-                                  ? builder.CreateLShr(sum_concat, shift_amount)
-                                  : sum_concat;
-
-      result[i] = builder.CreateTrunc(result_shifted, instTuple[i]->getType());
-    }
-
-    // Replace the add instruction with the result
-    for (unsigned i = 0; i < instTuple.size(); i++) {
-      instTuple[i]->replaceAllUsesWith(result[i]);
-      instTuple[i]->eraseFromParent();
-    }
   }
 
   return modified;

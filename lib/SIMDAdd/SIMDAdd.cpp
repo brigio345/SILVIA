@@ -77,12 +77,12 @@ void replaceAddsWithSIMDCall(SmallVector<Instruction *, 4> instTuple,
   Value *args[2];
   for (unsigned j = 0; j < 2; j++) {
     for (unsigned i = 0; i < instTuple.size(); i++) {
-      Value *arg = builder.CreateSExt(instTuple[i]->getOperand(j),
+      Value *arg = builder.CreateZExt(instTuple[i]->getOperand(j),
                                       IntegerType::get(context, 48));
       int shift_amount = (12 * (3 - i));
       if (shift_amount > 0) {
         arg = builder.CreateShl(
-            builder.CreateSExt(arg, IntegerType::get(context, 48)),
+            builder.CreateZExt(arg, IntegerType::get(context, 48)),
             shift_amount);
       }
       args[j] = (i > 0) ? builder.CreateOr(args[j], arg) : arg;

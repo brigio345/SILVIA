@@ -15,7 +15,7 @@ struct SIMDAdd : public BasicBlockPass {
   static char ID;
   SIMDAdd() : BasicBlockPass(ID) {}
 
-  bool runOnBasicBlock(BasicBlock &BB);
+  bool runOnBasicBlock(BasicBlock &BB) override;
 };
 
 char SIMDAdd::ID = 0;
@@ -25,11 +25,11 @@ static RegisterPass<SIMDAdd> X("simd-add", "Map add instructions to SIMD DSPs",
 
 Instruction *getLastOperandDef(Instruction *inst,
                                DenseMap<Instruction *, int> &instMap) {
-  Instruction *lastDef = NULL;
+  Instruction *lastDef = nullptr;
 
-  for (unsigned int i = 0; i < inst->getNumOperands(); i++) {
+  for (unsigned i = 0; i < inst->getNumOperands(); i++) {
     Value *op = inst->getOperand(i);
-    if (Instruction *opInst = dyn_cast<Instruction>(op)) {
+    if (auto opInst = dyn_cast<Instruction>(op)) {
       if ((!lastDef) || (instMap[lastDef] < instMap[opInst]))
         lastDef = opInst;
     }
@@ -40,12 +40,11 @@ Instruction *getLastOperandDef(Instruction *inst,
 
 Instruction *getFirstValueUse(Instruction *inst,
                               DenseMap<Instruction *, int> &instMap) {
-  Instruction *firstUse = NULL;
+  Instruction *firstUse = nullptr;
 
-  for (Value::use_iterator UI = inst->use_begin(), UE = inst->use_end();
-       UI != UE; ++UI) {
+  for (auto UI = inst->use_begin(), UE = inst->use_end(); UI != UE; ++UI) {
     Value *user = *UI;
-    if (Instruction *userInst = dyn_cast<Instruction>(user)) {
+    if (auto userInst = dyn_cast<Instruction>(user)) {
       if ((!firstUse) || (instMap[userInst] < instMap[firstUse]))
         firstUse = userInst;
     }
@@ -57,11 +56,10 @@ Instruction *getFirstValueUse(Instruction *inst,
 // Collect all the add instructions.
 void getSIMDableInstructions(BasicBlock &BB,
                              std::queue<Instruction *> &simd4Candidates) {
-  for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI) {
-    Instruction *I = BI;
-    if (I->getOpcode() == Instruction::Add) {
-      if (cast<IntegerType>(I->getType())->getBitWidth() <= 12)
-        simd4Candidates.push(I);
+  for (auto &I : BB) {
+    if (I.getOpcode() == Instruction::Add) {
+      if (cast<IntegerType>(I.getType())->getBitWidth() <= 12)
+        simd4Candidates.push(&I);
       // TODO: collect candidates for simd2
       // else if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 24)
       // simd2Candidates.push_back(binOp);
@@ -133,18 +131,16 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
   // DominatorTree DT(F);
   // if (DT.dominates(inst0, inst1)) {...}
   DenseMap<Instruction *, int> instMap;
-  for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI) {
-    Instruction *inst = BI;
-    instMap[inst] = instMap.size();
-  }
+  for (auto &inst : BB)
+    instMap[&inst] = instMap.size();
 
   // Build tuples of 4 instructions that can be mapped to the
   // same SIMD DSP.
   // TODO: check if a size of 8 is a good choice
   while (!simd4Candidates.empty()) {
     SmallVector<Instruction *, 4> instTuple;
-    Instruction *lastDef = NULL;
-    Instruction *firstUse = NULL;
+    Instruction *lastDef = nullptr;
+    Instruction *firstUse = nullptr;
 
     for (unsigned i = 0; i < simd4Candidates.size(); i++) {
       Instruction *addInstCurr = simd4Candidates.front();

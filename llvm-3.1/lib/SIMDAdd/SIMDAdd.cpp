@@ -77,7 +77,7 @@ void replaceAddsWithSIMDCall(SmallVector<Instruction *, 4> instTuple,
     for (unsigned i = 0; i < instTuple.size(); i++) {
       Value *arg = builder.CreateZExt(instTuple[i]->getOperand(j),
                                       IntegerType::get(context, 48));
-      int shift_amount = (12 * (3 - i));
+      int shift_amount = (12 * i);
       if (shift_amount > 0) {
         arg = builder.CreateShl(
             builder.CreateZExt(arg, IntegerType::get(context, 48)),
@@ -91,7 +91,7 @@ void replaceAddsWithSIMDCall(SmallVector<Instruction *, 4> instTuple,
 
   Value *result[4];
   for (unsigned i = 0; i < instTuple.size(); i++) {
-    int shift_amount = (12 * (3 - i));
+    int shift_amount = (12 * i);
     Value *result_shifted = (shift_amount > 0)
                                 ? builder.CreateLShr(sum_concat, shift_amount)
                                 : sum_concat;

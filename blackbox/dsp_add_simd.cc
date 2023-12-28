@@ -3,17 +3,17 @@
 #include <iostream>
 
 // Pipeline 4-SIMD DSPs with different latencies.
-ap_int<48> dsp_add_4simd_pipe_l0(ap_int<96> inputs) {
+ap_int<48> dsp_add_4simd_pipe_l0(ap_int<48> a, ap_int<48> b) {
 #pragma HLS inline off
   ap_int<48> dout;
-  auto dout0 = inputs(11,  0) + inputs(23, 12);
-  auto dout1 = inputs(35, 24) + inputs(47, 36);
-  auto dout2 = inputs(59, 48) + inputs(71, 60);
-  auto dout3 = inputs(83, 72) + inputs(95, 84);
-  dout(11,  0) = dout0;
-  dout(23, 12) = dout1;
-  dout(35, 24) = dout2;
-  dout(47, 36) = dout3;
+  auto dout0 = a(47, 36) + b(47, 36);
+  auto dout1 = a(35, 24) + b(35, 24);
+  auto dout2 = a(23, 12) + b(23, 12);
+  auto dout3 = a(11, 0) + b(11, 0);
+  dout(47, 36) = dout0;
+  dout(35, 24) = dout1;
+  dout(23, 12) = dout2;
+  dout(11, 0) = dout3;
   return dout;
 }
 

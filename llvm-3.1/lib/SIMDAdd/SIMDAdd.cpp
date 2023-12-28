@@ -73,18 +73,18 @@ void replaceAddsWithSIMDCall(
     Instruction *insertBefore, Function *myAddFunc, LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
-  Value *args = nullptr;
-  for (unsigned i = 0; i < instTuple.size(); i++) {
-    for (unsigned j = 0; j < instTuple[i][0]->getNumOperands(); j++) {
+  Value *args[2];
+  for (unsigned j = 0; j < 2; j++) {
+    for (unsigned i = 0; i < instTuple.size(); i++) {
       Value *arg = builder.CreateZExt(instTuple[i][0]->getOperand(j),
-                                      IntegerType::get(context, 96));
-      int shift_amount = (12 * (i * instTuple[i][0]->getNumOperands()) + j);
+                                      IntegerType::get(context, 48));
+      int shift_amount = (12 * (3 - i));
       if (shift_amount > 0) {
         arg = builder.CreateShl(
-            builder.CreateZExt(arg, IntegerType::get(context, 96)),
+            builder.CreateZExt(arg, IntegerType::get(context, 48)),
             shift_amount);
       }
-      args = args ? builder.CreateOr(args, arg) : arg;
+      args[j] = (i > 0) ? builder.CreateOr(args[j], arg) : arg;
     }
   }
 
@@ -92,7 +92,7 @@ void replaceAddsWithSIMDCall(
 
   Value *result[4];
   for (unsigned i = 0; i < instTuple.size(); i++) {
-    int shift_amount = (12 * i);
+    int shift_amount = (12 * (3 - i));
     Value *result_shifted = (shift_amount > 0)
                                 ? builder.CreateLShr(sum_concat, shift_amount)
                                 : sum_concat;

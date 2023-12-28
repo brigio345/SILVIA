@@ -72,9 +72,9 @@ void replaceAddsWithSIMDCall(SmallVector<Instruction *, 4> instTuple,
                              LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
-  Value *args[2];
-  for (unsigned j = 0; j < 2; j++) {
-    for (unsigned i = 0; i < instTuple.size(); i++) {
+  Value *args[2] = {nullptr};
+  for (unsigned i = 0; i < instTuple.size(); i++) {
+    for (unsigned j = 0; j < instTuple[i]->getNumOperands(); j++) {
       Value *arg = builder.CreateZExt(instTuple[i]->getOperand(j),
                                       IntegerType::get(context, 48));
       int shift_amount = (12 * i);
@@ -83,7 +83,7 @@ void replaceAddsWithSIMDCall(SmallVector<Instruction *, 4> instTuple,
             builder.CreateZExt(arg, IntegerType::get(context, 48)),
             shift_amount);
       }
-      args[j] = (i > 0) ? builder.CreateOr(args[j], arg) : arg;
+      args[j] = args[j] ? builder.CreateOr(args[j], arg) : arg;
     }
   }
 

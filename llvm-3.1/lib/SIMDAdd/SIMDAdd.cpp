@@ -54,13 +54,12 @@ Instruction *getFirstValueUse(Instruction *inst,
 }
 
 // Collect all the add instructions.
-void getSIMDableInstructions(
-    BasicBlock &BB,
-    std::queue<SmallVector<Instruction *, 1>> &simd4Candidates) {
+void getSIMDableInstructions(BasicBlock &BB,
+                             std::queue<Instruction *> &simd4Candidates) {
   for (auto &I : BB) {
     if (I.getOpcode() == Instruction::Add) {
       if (cast<IntegerType>(I.getType())->getBitWidth() <= 12)
-        simd4Candidates.push(SmallVector<Instruction *, 1>{1, &I});
+        simd4Candidates.push(&I);
       // TODO: collect candidates for simd2
       // else if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 24)
       // simd2Candidates.push_back(binOp);
@@ -68,15 +67,15 @@ void getSIMDableInstructions(
   }
 }
 
-void replaceAddsWithSIMDCall(
-    SmallVector<SmallVector<Instruction *, 1>, 4> instTuple,
-    Instruction *insertBefore, Function *myAddFunc, LLVMContext &context) {
+void replaceAddsWithSIMDCall(SmallVector<Instruction *, 4> instTuple,
+                             Instruction *insertBefore, Function *myAddFunc,
+                             LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
   Value *args[2];
   for (unsigned j = 0; j < 2; j++) {
     for (unsigned i = 0; i < instTuple.size(); i++) {
-      Value *arg = builder.CreateZExt(instTuple[i][0]->getOperand(j),
+      Value *arg = builder.CreateZExt(instTuple[i]->getOperand(j),
                                       IntegerType::get(context, 48));
       int shift_amount = (12 * (3 - i));
       if (shift_amount > 0) {
@@ -97,14 +96,13 @@ void replaceAddsWithSIMDCall(
                                 ? builder.CreateLShr(sum_concat, shift_amount)
                                 : sum_concat;
 
-    result[i] = builder.CreateTrunc(
-        result_shifted, instTuple[i][instTuple[i].size() - 1]->getType());
+    result[i] = builder.CreateTrunc(result_shifted, instTuple[i]->getType());
   }
 
   // Replace the add instruction with the result
   for (unsigned i = 0; i < instTuple.size(); i++) {
-    instTuple[i][instTuple[i].size() - 1]->replaceAllUsesWith(result[i]);
-    instTuple[i][instTuple[i].size() - 1]->eraseFromParent();
+    instTuple[i]->replaceAllUsesWith(result[i]);
+    instTuple[i]->eraseFromParent();
   }
 }
 
@@ -126,7 +124,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
 
   bool modified = false;
 
-  std::queue<SmallVector<Instruction *, 1>> simd4Candidates;
+  std::queue<Instruction *> simd4Candidates;
   getSIMDableInstructions(BB, simd4Candidates);
 
   // TODO: Maybe use DominatorTree? (It may be an overkill)
@@ -140,12 +138,13 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
   // same SIMD DSP.
   // TODO: check if a size of 8 is a good choice
   while (!simd4Candidates.empty()) {
-    SmallVector<SmallVector<Instruction *, 1>, 4> instTuple;
+    SmallVector<Instruction *, 4> instTuple;
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
     for (unsigned i = 0; i < simd4Candidates.size(); i++) {
-      Instruction *addInstCurr = simd4Candidates.front()[0];
+      Instruction *addInstCurr = simd4Candidates.front();
+      simd4Candidates.pop();
 
       Instruction *lastDefCurr = getLastOperandDef(addInstCurr, instMap);
       Instruction *firstUseCurr = getFirstValueUse(addInstCurr, instMap);
@@ -162,11 +161,12 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       // If firstUse is before lastDef this pair of
       // instructions is not compatible with current
       // tuple.
-      if (firstUse && (instMap[firstUse] < instMap[lastDef]))
+      if (firstUse && (instMap[firstUse] < instMap[lastDef])) {
+        simd4Candidates.push(addInstCurr);
         continue;
+      }
 
-      simd4Candidates.pop();
-      instTuple.push_back(SmallVector<Instruction *, 1>{1, addInstCurr});
+      instTuple.push_back(addInstCurr);
 
       if (instTuple.size() == 4)
         break;

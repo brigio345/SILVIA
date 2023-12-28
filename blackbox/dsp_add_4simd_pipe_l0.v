@@ -59,22 +59,21 @@ endmodule // dsp_add_simd
 
 `timescale 1ns/1ps
 module dsp_add_4simd_pipe_l0 (input clk, rst, ce, 
-                     input [47:0] a, 
-                     input [47:0] b,
+                     input [95:0] inputs, 
                      output [47:0] ap_return);
 
 dsp_add_4simd_pipe_l0_internal dsp_add_4simd_pipe_l0_internal_U (
   .clk(clk),
   .rst(rst),
   .ce(ce),
-  .a0(a[47:36]),
-  .a1(a[35:24]),
-  .a2(a[23:12]),
-  .a3(a[11:0]),
-  .b0(b[47:36]),
-  .b1(b[35:24]),
-  .b2(b[23:12]),
-  .b3(b[11:0]),
+  .a0(inputs[11: 0]),
+  .a1(inputs[35:24]),
+  .a2(inputs[59:48]),
+  .a3(inputs[83:72]),
+  .b0(inputs[23:12]),
+  .b1(inputs[47:36]),
+  .b2(inputs[71:60]),
+  .b3(inputs[95:84]),
   .ap_return(ap_return));
 endmodule
   

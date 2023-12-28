@@ -4,7 +4,7 @@
 #include "ap_int.h"
 
 // Pipeline 4-SIMD DSPs with different latencies.
-ap_int<48> dsp_add_4simd_pipe_l0(ap_int<48> a, ap_int<48> b);
+ap_int<48> dsp_add_4simd_pipe_l0(ap_int<96> inputs);
 
 ap_int<48> dsp_add_4simd_pipe_l1(ap_int<12> a0, ap_int<12> a1, ap_int<12> a2,
                                  ap_int<12> a3, ap_int<12> b0, ap_int<12> b1,

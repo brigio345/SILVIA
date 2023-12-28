@@ -2,24 +2,17 @@
   "c_function_name"     : "dsp_add_4simd_pipe_l0",
   "rtl_top_module_name" : "dsp_add_4simd_pipe_l0",
   "c_files" : [{ 
-    "c_file" : "../blackbox/dsp_add_simd.cc",
-    "cflag" : "-I../blackbox"
+    "c_file" : "blackbox/dsp_add_simd.cc",
+    "cflag" : "-Iblackbox"
   }],
   "rtl_files" : [
-    "../blackbox/dsp_add_4simd_pipe_l0.v"
+    "blackbox/dsp_add_4simd_pipe_l0.v"
   ],
   "c_parameters" : [{
-    "c_name" : "a",
+    "c_name" : "inputs",
     "c_port_direction" : "in",
     "rtl_ports" : {
-      "data_read_in" : "a"
-    }
-  },
-  {
-    "c_name" : "b",
-    "c_port_direction" : "in",
-    "rtl_ports" : {
-      "data_read_in" : "b"
+      "data_read_in" : "inputs"
     }
   }],
   "c_return" : {

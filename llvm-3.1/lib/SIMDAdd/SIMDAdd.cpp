@@ -5,6 +5,7 @@
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"
 #include "llvm/Pass.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/IRBuilder.h"
 
 #include <queue>
@@ -22,6 +23,11 @@ char SIMDAdd::ID = 0;
 static RegisterPass<SIMDAdd> X("simd-add", "Map add instructions to SIMD DSPs",
                                false /* Only looks at CFG */,
                                true /* Transformation Pass */);
+
+static cl::opt<std::string>
+    SIMDOp("simd-add-op", cl::init("dsp_add_4simd_pipe_l0"), cl::Hidden,
+           cl::desc("The operation to map to SIMD DSPs. "
+                    "Possible values are: dsp_add_4simd_pipe_l0."));
 
 Instruction *getLastOperandDef(Instruction *inst,
                                DenseMap<Instruction *, int> &instMap) {
@@ -55,11 +61,11 @@ Instruction *getFirstValueUse(Instruction *inst,
 
 // Collect all the add instructions.
 void getSIMDableInstructions(BasicBlock &BB,
-                             std::queue<Instruction *> &simd4Candidates) {
+                             std::queue<Instruction *> &candidateInsts) {
   for (auto &I : BB) {
     if (I.getOpcode() == Instruction::Add) {
       if (cast<IntegerType>(I.getType())->getBitWidth() <= 12)
-        simd4Candidates.push(&I);
+        candidateInsts.push(&I);
       // TODO: collect candidates for simd2
       // else if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 24)
       // simd2Candidates.push_back(binOp);
@@ -67,9 +73,9 @@ void getSIMDableInstructions(BasicBlock &BB,
   }
 }
 
-void replaceAddsWithSIMDCall(SmallVector<Instruction *, 4> instTuple,
-                             Instruction *insertBefore, Function *myAddFunc,
-                             LLVMContext &context) {
+void replaceInstsWithSIMDCall(SmallVector<Instruction *, 4> instTuple,
+                              Instruction *insertBefore, Function *SIMDFunc,
+                              LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
   Value *args[2] = {nullptr};
@@ -87,7 +93,7 @@ void replaceAddsWithSIMDCall(SmallVector<Instruction *, 4> instTuple,
     }
   }
 
-  Value *sum_concat = builder.CreateCall(myAddFunc, args);
+  Value *sum_concat = builder.CreateCall(SIMDFunc, args);
 
   Value *result[4];
   for (unsigned i = 0; i < instTuple.size(); i++) {
@@ -110,22 +116,21 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
   // FIXME: check if LLVM 3.1 provides alternatives to skipFunction
   // if (skipFunction(F))
   Function *F = BB.getParent();
-  if (F->getName().startswith("_ssdm_op") ||
-      F->getName() == "dsp_add_4simd_pipe_l0")
+  if (F->getName().startswith("_ssdm_op") || F->getName() == SIMDOp)
     return false;
 
   // Get the SIMD function
   Module *module = F->getParent();
-  Function *myAddFunc = module->getFunction("dsp_add_4simd_pipe_l0");
-  if (!myAddFunc)
-    throw "Function dsp_add_4simd_pipe_l0 not found";
+  Function *SIMDFunc = module->getFunction(SIMDOp);
+  if (!SIMDFunc)
+    throw "Function " + SIMDOp + " not found";
 
   LLVMContext &context = F->getContext();
 
   bool modified = false;
 
-  std::queue<Instruction *> simd4Candidates;
-  getSIMDableInstructions(BB, simd4Candidates);
+  std::queue<Instruction *> candidateInsts;
+  getSIMDableInstructions(BB, candidateInsts);
 
   // TODO: Maybe use DominatorTree? (It may be an overkill)
   // DominatorTree DT(F);
@@ -137,17 +142,17 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
   // Build tuples of 4 instructions that can be mapped to the
   // same SIMD DSP.
   // TODO: check if a size of 8 is a good choice
-  while (!simd4Candidates.empty()) {
+  while (!candidateInsts.empty()) {
     SmallVector<Instruction *, 4> instTuple;
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
-    for (unsigned i = 0; i < simd4Candidates.size(); i++) {
-      Instruction *addInstCurr = simd4Candidates.front();
-      simd4Candidates.pop();
+    for (unsigned i = 0; i < candidateInsts.size(); i++) {
+      Instruction *candidateInstCurr = candidateInsts.front();
+      candidateInsts.pop();
 
-      Instruction *lastDefCurr = getLastOperandDef(addInstCurr, instMap);
-      Instruction *firstUseCurr = getFirstValueUse(addInstCurr, instMap);
+      Instruction *lastDefCurr = getLastOperandDef(candidateInstCurr, instMap);
+      Instruction *firstUseCurr = getFirstValueUse(candidateInstCurr, instMap);
 
       // Update with tuple worst case
       if ((!lastDef) ||
@@ -162,11 +167,11 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       // instructions is not compatible with current
       // tuple.
       if (firstUse && (instMap[firstUse] < instMap[lastDef])) {
-        simd4Candidates.push(addInstCurr);
+        candidateInsts.push(candidateInstCurr);
         continue;
       }
 
-      instTuple.push_back(addInstCurr);
+      instTuple.push_back(candidateInstCurr);
 
       if (instTuple.size() == 4)
         break;
@@ -176,7 +181,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     if (instTuple.size() < 2)
       continue;
 
-    replaceAddsWithSIMDCall(instTuple, firstUse, myAddFunc, context);
+    replaceInstsWithSIMDCall(instTuple, firstUse, SIMDFunc, context);
     modified = true;
   }
 

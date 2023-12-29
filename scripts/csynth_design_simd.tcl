@@ -1,9 +1,23 @@
 ::common::set_param hls.enable_hidden_option_error false
 
-proc csynth_design_simd {solution_path llvm_install_path} {
-	# TODO: call the pass inserting the dummy blackbox call
-	#set ::LLVM_CUSTOM_CMD {$LLVM_CUSTOM_OPT -load $::env(HLS_LLVM_PLUGIN_DIR)/LLVMCustomPasses.so -mypass $LLVM_CUSTOM_INPUT -o $LLVM_CUSTOM_OUTPUT}
-	add_files -blackbox ../blackbox/dsp_add_4simd_pipe_l0.json
+proc csynth_design_simd {solution_path llvm_install_path {blackbox_root ".."}} {
+	if { ![file exists $::env(HLS_LLVM_PLUGIN_DIR)/LLVMCustomPasses.so] } {
+		error "Must build LLVMCustomPasses.so before running this example"
+	}
+
+	set ::LLVM_CUSTOM_LINK \
+		$::env(XILINX_HLS)/lnx64/tools/clang-3.9-csynth/bin/llvm-link
+	set ::LLVM_CUSTOM_NM \
+		$::env(XILINX_HLS)/lnx64/tools/clang-3.9-csynth/bin/llvm-nm
+	set ::BB_BC $::env(HOME)/llvm/hls-llvm-pass/test/add_ap_int_12/dsp_add_simd.g.bc
+
+	set ::LLVM_CUSTOM_CMD {$::env(HOME)/llvm/hls-llvm-pass/scripts/safe_link.sh \
+		$::LLVM_CUSTOM_NM $::LLVM_CUSTOM_LINK $LLVM_CUSTOM_OPT \
+		$LLVM_CUSTOM_INPUT $LLVM_CUSTOM_OUTPUT $::env(HLS_LLVM_PLUGIN_DIR) $::BB_BC\
+	}
+
+	exec cp -r ${blackbox_root}/blackbox .
+	add_files -blackbox blackbox/dsp_add_4simd_pipe_l0.json
 	csynth_design
 	exec unzip -o -d dut ${solution_path}/.autopilot/db/dut.hcp
 	set ::env(LD_LIBRARY_PATH) "${llvm_install_path}/lib/:$::env(LD_LIBRARY_PATH)"

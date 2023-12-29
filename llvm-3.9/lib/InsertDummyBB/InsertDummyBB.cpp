@@ -41,7 +41,8 @@ StringRef InsertDummyBB::_getBBName(Module &M) const {
   for (Function &F : M) {
     if (F.empty())
       continue;
-    if (std::string(F.getName()).find("giovanni") != std::string::npos) {
+    if (std::string(F.getName()).find("dsp_add_4simd_pipe_l0") !=
+        std::string::npos) {
       BBName = F.getName();
 #ifdef INSERT_DUMMY_DB_DEBUG_
       dbgs() << BEGIN_SEP << "Found the BB declaration: " << F.getName()
@@ -112,15 +113,12 @@ bool InsertDummyBB::runOnModule(Module &M) {
         builder.SetInsertPoint(latch->getTerminator());
 
         StructType *ap_int48 = M.getTypeByName("struct.ap_int<48>");
-        StructType *ap_int24 = M.getTypeByName("struct.ap_int<24>");
 
         Value *retVal = builder.CreateAlloca(ap_int48);
-        Value *val0 = builder.CreateAlloca(ap_int24);
-        Value *val1 = builder.CreateAlloca(ap_int24);
-        Value *val2 = builder.CreateAlloca(ap_int24);
-        Value *val3 = builder.CreateAlloca(ap_int24);
+        Value *val0 = builder.CreateAlloca(ap_int48);
+        Value *val1 = builder.CreateAlloca(ap_int48);
 
-        builder.CreateCall(BBFn, {retVal, val0, val1, val2, val3});
+        builder.CreateCall(BBFn, {retVal, val0, val1});
         finished = true;
 #ifdef INSERT_DUMMY_DB_DEBUG_
         dbgs() << BEGIN_SEP << "Inserted dummy call." << END_SEP;

@@ -9,7 +9,7 @@ proc csynth_design_simd {solution_path llvm_install_path {blackbox_root ".."}} {
 		$::env(XILINX_HLS)/lnx64/tools/clang-3.9-csynth/bin/llvm-link
 	set ::LLVM_CUSTOM_NM \
 		$::env(XILINX_HLS)/lnx64/tools/clang-3.9-csynth/bin/llvm-nm
-	set ::BB_BC $::env(HOME)/llvm/hls-llvm-pass/test/add_ap_int_12/dsp_add_simd.g.bc
+	set ::BB_BC ${solution_path}/.autopilot/db/dsp_add_simd.g.bc
 
 	set ::LLVM_CUSTOM_CMD {$::env(HOME)/llvm/hls-llvm-pass/scripts/safe_link.sh \
 		$::LLVM_CUSTOM_NM $::LLVM_CUSTOM_LINK $LLVM_CUSTOM_OPT \

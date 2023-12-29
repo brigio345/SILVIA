@@ -27,13 +27,13 @@ LDFLAGS:=`$(LLVM_CONFIG) --ldflags`
 
 all: CXXFLAGS := $(CXXFLAGS) -D_DEBUG
 
-all: LLVMInsertDummyBB.so
+all: LLVMCustomPasses.so
 
 all-debug-off: CXXFLAGS := $(CXXFLAGS) -DNDEBUG
 
-all-debug-off: LLVMInsertDummyBB.so
+all-debug-off: LLVMCustomPasses.so
 
-LLVMInsertDummyBB.so: InsertDummyBB.o
+LLVMCustomPasses.so: InsertDummyBB.o
 	$(CXX) -shared $^ -o $@ -fPIC $(CXXFLAGS) $(LDFLAGS)
 
 %.o: %.cpp

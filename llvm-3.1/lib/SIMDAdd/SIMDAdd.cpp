@@ -148,7 +148,8 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
-    for (unsigned i = 0; i < candidateInsts.size(); i++) {
+    const unsigned candidates = candidateInsts.size();
+    for (unsigned i = 0; i < candidates; i++) {
       SmallVector<Instruction *, 1> candidateInstCurr = candidateInsts.front();
       candidateInsts.pop();
 

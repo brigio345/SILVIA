@@ -16,7 +16,7 @@ proc csynth_design_simd {solution_path llvm_install_path {blackbox_root ".."}} {
 		$LLVM_CUSTOM_INPUT $LLVM_CUSTOM_OUTPUT $::env(HLS_LLVM_PLUGIN_DIR) $::BB_BC\
 	}
 
-	exec cp -r ${blackbox_root}/blackbox .
+	exec ln -sf ${blackbox_root}/blackbox .
 	add_files -blackbox blackbox/dsp_add_4simd_pipe_l0.json
 	csynth_design
 	exec unzip -o -d dut ${solution_path}/.autopilot/db/dut.hcp

@@ -170,7 +170,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       // If firstUse is before lastDef this pair of
       // instructions is not compatible with current
       // tuple.
-      if (firstUse && (instMap[firstUse] < instMap[lastDef])) {
+      if (firstUse && lastDef && (instMap[firstUse] < instMap[lastDef])) {
         candidateInsts.push(candidateInstCurr);
         continue;
       }

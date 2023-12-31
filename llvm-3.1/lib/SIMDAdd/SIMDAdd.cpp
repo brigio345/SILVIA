@@ -8,7 +8,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/IRBuilder.h"
 
-#include <queue>
+#include <list>
 
 using namespace llvm;
 
@@ -61,11 +61,11 @@ Instruction *getFirstValueUse(Instruction *inst,
 
 // Collect all the add instructions.
 void getSIMDableInstructions(
-    BasicBlock &BB, std::queue<SmallVector<Instruction *, 1>> &candidateInsts) {
+    BasicBlock &BB, std::list<SmallVector<Instruction *, 1>> &candidateInsts) {
   for (auto &I : BB) {
     if (I.getOpcode() == Instruction::Add) {
       if (cast<IntegerType>(I.getType())->getBitWidth() <= 12)
-        candidateInsts.push(SmallVector<Instruction *, 1>(1, &I));
+        candidateInsts.push_back(SmallVector<Instruction *, 1>(1, &I));
       // TODO: collect candidates for simd2
       // else if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 24)
       // simd2Candidates.push_back(binOp);
@@ -130,7 +130,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
 
   bool modified = false;
 
-  std::queue<SmallVector<Instruction *, 1>> candidateInsts;
+  std::list<SmallVector<Instruction *, 1>> candidateInsts;
   getSIMDableInstructions(BB, candidateInsts);
 
   // TODO: Maybe use DominatorTree? (It may be an overkill)
@@ -148,37 +148,40 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
-    const unsigned candidates = candidateInsts.size();
-    for (unsigned i = 0; i < candidates; i++) {
-      SmallVector<Instruction *, 1> candidateInstCurr = candidateInsts.front();
-      candidateInsts.pop();
-
+    for (auto &candidateInstCurr : candidateInsts) {
       Instruction *lastDefCurr =
           getLastOperandDef(candidateInstCurr[0], instMap);
       Instruction *firstUseCurr =
           getFirstValueUse(candidateInstCurr[0], instMap);
 
-      // Update with tuple worst case
-      if ((!lastDef) ||
-          (lastDefCurr && (instMap[lastDef] < instMap[lastDefCurr])))
-        lastDef = lastDefCurr;
+      if ((!lastDefCurr) ||
+          (lastDef && (instMap[lastDefCurr] < instMap[lastDef])))
+        lastDefCurr = lastDef;
 
-      if ((!firstUse) ||
-          (firstUseCurr && (instMap[firstUseCurr] < instMap[firstUse])))
-        firstUse = firstUseCurr;
+      if ((!firstUseCurr) ||
+          (firstUse && (instMap[firstUse] < instMap[firstUseCurr])))
+        firstUseCurr = firstUse;
 
-      // If firstUse is before lastDef this pair of
-      // instructions is not compatible with current
-      // tuple.
-      if (firstUse && lastDef && (instMap[firstUse] < instMap[lastDef])) {
-        candidateInsts.push(candidateInstCurr);
+      // If firstUseCurr is before lastDefCurr this pair of instructions is not
+      // compatible with current tuple.
+      if (firstUseCurr && lastDefCurr &&
+          (instMap[firstUseCurr] < instMap[lastDefCurr]))
         continue;
-      }
 
       instTuple.push_back(candidateInstCurr);
 
+      // Update with tuple worst case
+      firstUse = firstUseCurr;
+      lastDef = lastDefCurr;
+
       if (instTuple.size() == 4)
         break;
+    }
+
+    // Remove the selected instructions from the candidates.
+    for (auto &inst : instTuple) {
+      candidateInsts.erase(
+          std::find(candidateInsts.begin(), candidateInsts.end(), inst));
     }
 
     // TODO: maybe also skip tuples of size 2?

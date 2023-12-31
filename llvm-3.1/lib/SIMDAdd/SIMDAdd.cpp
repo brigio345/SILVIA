@@ -31,12 +31,14 @@ static cl::opt<std::string>
 
 Instruction *getLastOperandDef(Instruction *inst,
                                DenseMap<Instruction *, int> &instMap) {
-  Instruction *lastDef = nullptr;
+  BasicBlock *instBB = inst->getParent();
 
+  Instruction *lastDef = nullptr;
   for (unsigned i = 0; i < inst->getNumOperands(); i++) {
     Value *op = inst->getOperand(i);
     if (auto opInst = dyn_cast<Instruction>(op)) {
-      if ((!lastDef) || (instMap[lastDef] < instMap[opInst]))
+      if ((opInst->getParent() == instBB) &&
+          ((!lastDef) || (instMap[lastDef] < instMap[opInst])))
         lastDef = opInst;
     }
   }
@@ -46,12 +48,14 @@ Instruction *getLastOperandDef(Instruction *inst,
 
 Instruction *getFirstValueUse(Instruction *inst,
                               DenseMap<Instruction *, int> &instMap) {
-  Instruction *firstUse = nullptr;
+  BasicBlock *instBB = inst->getParent();
 
+  Instruction *firstUse = nullptr;
   for (auto UI = inst->use_begin(), UE = inst->use_end(); UI != UE; ++UI) {
     Value *user = *UI;
     if (auto userInst = dyn_cast<Instruction>(user)) {
-      if ((!firstUse) || (instMap[userInst] < instMap[firstUse]))
+      if ((userInst->getParent() == instBB) &&
+          ((!firstUse) || (instMap[userInst] < instMap[firstUse])))
         firstUse = userInst;
     }
   }

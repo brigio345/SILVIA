@@ -8,6 +8,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/IRBuilder.h"
 
+#include <cassert>
 #include <list>
 
 using namespace llvm;
@@ -127,8 +128,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
   // Get the SIMD function
   Module *module = F->getParent();
   Function *SIMDFunc = module->getFunction(SIMDOp);
-  if (!SIMDFunc)
-    throw "Function " + SIMDOp + " not found";
+  assert(!SIMDFunc && "SIMD function not found");
 
   LLVMContext &context = F->getContext();
 

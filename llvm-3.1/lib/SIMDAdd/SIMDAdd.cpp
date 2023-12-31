@@ -26,9 +26,9 @@ static RegisterPass<SIMDAdd> X("simd-add", "Map add instructions to SIMD DSPs",
                                true /* Transformation Pass */);
 
 static cl::opt<std::string>
-    SIMDOp("simd-add-op", cl::init("dsp_add_4simd_pipe_l0"), cl::Hidden,
+    SIMDOp("simd-add-op", cl::init("add4simd"), cl::Hidden,
            cl::desc("The operation to map to SIMD DSPs. "
-                    "Possible values are: dsp_add_4simd_pipe_l0."));
+                    "Possible values are: add4simd."));
 
 Instruction *getLastOperandDef(Instruction *inst,
                                DenseMap<Instruction *, int> &instMap) {

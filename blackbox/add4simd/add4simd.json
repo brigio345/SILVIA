@@ -2,10 +2,10 @@
   "c_function_name"     : "add4simd",
   "rtl_top_module_name" : "add4simd",
   "c_files" : [{ 
-    "c_file" : "add4simd.pp"
+    "c_file" : "blackbox/add4simd/add4simd.cpp"
   }],
   "rtl_files" : [
-    "add4simd.v"
+    "blackbox/add4simd/add4simd.v"
   ],
   "c_parameters" : [{
     "c_name" : "a",

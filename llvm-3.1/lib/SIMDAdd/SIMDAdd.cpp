@@ -37,11 +37,11 @@ Instruction *getLastOperandDef(Instruction *inst,
   Instruction *lastDef = nullptr;
   for (unsigned i = 0; i < inst->getNumOperands(); ++i) {
     Value *op = inst->getOperand(i);
-    if (auto opInst = dyn_cast<Instruction>(op)) {
-      if ((opInst->getParent() == instBB) &&
-          ((!lastDef) || (instMap[lastDef] < instMap[opInst])))
-        lastDef = opInst;
-    }
+    auto opInst = dyn_cast<Instruction>(op);
+    if ((!opInst) || (opInst->getParent() != instBB))
+      continue;
+    if ((!lastDef) || (instMap[lastDef] < instMap[opInst]))
+      lastDef = opInst;
   }
 
   return lastDef;
@@ -54,11 +54,11 @@ Instruction *getFirstValueUse(Instruction *inst,
   Instruction *firstUse = nullptr;
   for (auto UI = inst->use_begin(), UE = inst->use_end(); UI != UE; ++UI) {
     Value *user = *UI;
-    if (auto userInst = dyn_cast<Instruction>(user)) {
-      if ((userInst->getParent() == instBB) &&
-          ((!firstUse) || (instMap[userInst] < instMap[firstUse])))
-        firstUse = userInst;
-    }
+    auto userInst = dyn_cast<Instruction>(user);
+    if ((!userInst) || (userInst->getParent() != instBB))
+      continue;
+    if ((!firstUse) || (instMap[userInst] < instMap[firstUse]))
+      firstUse = userInst;
   }
 
   return firstUse;
@@ -68,13 +68,13 @@ Instruction *getFirstValueUse(Instruction *inst,
 void getSIMDableInstructions(
     BasicBlock &BB, std::list<SmallVector<Instruction *, 1>> &candidateInsts) {
   for (auto &I : BB) {
-    if (I.getOpcode() == Instruction::Add) {
-      if (cast<IntegerType>(I.getType())->getBitWidth() <= 12)
-        candidateInsts.push_back(SmallVector<Instruction *, 1>(1, &I));
-      // TODO: collect candidates for simd2
-      // else if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 24)
-      // simd2Candidates.push_back(binOp);
-    }
+    if (I.getOpcode() != Instruction::Add)
+      continue;
+    if (cast<IntegerType>(I.getType())->getBitWidth() <= 12)
+      candidateInsts.push_back(SmallVector<Instruction *, 1>(1, &I));
+    // TODO: collect candidates for simd2
+    // else if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 24)
+    // simd2Candidates.push_back(binOp);
   }
 }
 

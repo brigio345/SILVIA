@@ -35,7 +35,7 @@ Instruction *getLastOperandDef(Instruction *inst,
   BasicBlock *instBB = inst->getParent();
 
   Instruction *lastDef = nullptr;
-  for (unsigned i = 0; i < inst->getNumOperands(); i++) {
+  for (unsigned i = 0; i < inst->getNumOperands(); ++i) {
     Value *op = inst->getOperand(i);
     if (auto opInst = dyn_cast<Instruction>(op)) {
       if ((opInst->getParent() == instBB) &&
@@ -84,8 +84,8 @@ void replaceInstsWithSIMDCall(
   IRBuilder<> builder(insertBefore);
 
   Value *args[2] = {nullptr};
-  for (unsigned i = 0; i < instTuple.size(); i++) {
-    for (unsigned j = 0; j < instTuple[i][0]->getNumOperands(); j++) {
+  for (unsigned i = 0; i < instTuple.size(); ++i) {
+    for (unsigned j = 0; j < instTuple[i][0]->getNumOperands(); ++j) {
       Value *arg = builder.CreateZExt(instTuple[i][0]->getOperand(j),
                                       IntegerType::get(context, 48));
       int shift_amount = (12 * i);
@@ -101,7 +101,7 @@ void replaceInstsWithSIMDCall(
   Value *sum_concat = builder.CreateCall(SIMDFunc, args);
 
   Value *result[4];
-  for (unsigned i = 0; i < instTuple.size(); i++) {
+  for (unsigned i = 0; i < instTuple.size(); ++i) {
     int shift_amount = (12 * i);
     Value *result_shifted = (shift_amount > 0)
                                 ? builder.CreateLShr(sum_concat, shift_amount)
@@ -112,7 +112,7 @@ void replaceInstsWithSIMDCall(
   }
 
   // Replace the add instruction with the result
-  for (unsigned i = 0; i < instTuple.size(); i++) {
+  for (unsigned i = 0; i < instTuple.size(); ++i) {
     instTuple[i][instTuple[i].size() - 1]->replaceAllUsesWith(result[i]);
     instTuple[i][instTuple[i].size() - 1]->eraseFromParent();
   }
@@ -128,7 +128,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
   // Get the SIMD function
   Module *module = F->getParent();
   Function *SIMDFunc = module->getFunction(SIMDOp);
-  assert(!SIMDFunc && "SIMD function not found");
+  assert(SIMDFunc && "SIMD function not found");
 
   LLVMContext &context = F->getContext();
 

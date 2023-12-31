@@ -73,6 +73,25 @@ Instruction *getFirstValueUse(Instruction *inst) {
   return firstUse;
 }
 
+void anticipateDefs(Instruction *inst) {
+  BasicBlock *instBB = inst->getParent();
+  for (unsigned i = 0; i < inst->getNumOperands(); ++i) {
+    Value *op = inst->getOperand(i);
+    auto opInst = dyn_cast<Instruction>(op);
+    if (!opInst)
+      continue;
+    if (opInst->getParent() == instBB)
+      anticipateDefs(opInst);
+  }
+
+  Instruction *insertionPoint = instBB->getFirstNonPHI();
+  auto lastDef = getLastOperandDef(inst);
+  if (lastDef)
+    insertionPoint = lastDef->getNextNode();
+
+  inst->moveBefore(insertionPoint);
+}
+
 // Collect all the add instructions.
 void getSIMDableInstructions(
     BasicBlock &BB, std::list<SmallVector<Instruction *, 1>> &candidateInsts) {
@@ -154,6 +173,10 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
+    for (auto &candidateInstCurr : candidateInsts) {
+      anticipateDefs(candidateInstCurr[0]);
+      // posticipateUses(inst);
+    }
     DenseMap<Instruction *, int> instMap;
     getInstMap(&BB, instMap);
     for (auto &candidateInstCurr : candidateInsts) {

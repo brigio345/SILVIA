@@ -30,9 +30,16 @@ static cl::opt<std::string>
            cl::desc("The operation to map to SIMD DSPs. "
                     "Possible values are: dsp_add_4simd_pipe_l0."));
 
-Instruction *getLastOperandDef(Instruction *inst,
-                               DenseMap<Instruction *, int> &instMap) {
+void getInstMap(BasicBlock *BB, DenseMap<Instruction *, int> &instMap) {
+  for (auto &inst : *BB)
+    instMap[&inst] = instMap.size();
+}
+
+Instruction *getLastOperandDef(Instruction *inst) {
   BasicBlock *instBB = inst->getParent();
+
+  DenseMap<Instruction *, int> instMap;
+  getInstMap(instBB, instMap);
 
   Instruction *lastDef = nullptr;
   for (unsigned i = 0; i < inst->getNumOperands(); ++i) {
@@ -47,9 +54,11 @@ Instruction *getLastOperandDef(Instruction *inst,
   return lastDef;
 }
 
-Instruction *getFirstValueUse(Instruction *inst,
-                              DenseMap<Instruction *, int> &instMap) {
+Instruction *getFirstValueUse(Instruction *inst) {
   BasicBlock *instBB = inst->getParent();
+
+  DenseMap<Instruction *, int> instMap;
+  getInstMap(instBB, instMap);
 
   Instruction *firstUse = nullptr;
   for (auto UI = inst->use_begin(), UE = inst->use_end(); UI != UE; ++UI) {
@@ -137,13 +146,6 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
   std::list<SmallVector<Instruction *, 1>> candidateInsts;
   getSIMDableInstructions(BB, candidateInsts);
 
-  // TODO: Maybe use DominatorTree? (It may be an overkill)
-  // DominatorTree DT(F);
-  // if (DT.dominates(inst0, inst1)) {...}
-  DenseMap<Instruction *, int> instMap;
-  for (auto &inst : BB)
-    instMap[&inst] = instMap.size();
-
   // Build tuples of 4 instructions that can be mapped to the
   // same SIMD DSP.
   // TODO: check if a size of 8 is a good choice
@@ -152,11 +154,11 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
+    DenseMap<Instruction *, int> instMap;
+    getInstMap(&BB, instMap);
     for (auto &candidateInstCurr : candidateInsts) {
-      Instruction *lastDefCurr =
-          getLastOperandDef(candidateInstCurr[0], instMap);
-      Instruction *firstUseCurr =
-          getFirstValueUse(candidateInstCurr[0], instMap);
+      Instruction *lastDefCurr = getLastOperandDef(candidateInstCurr[0]);
+      Instruction *firstUseCurr = getFirstValueUse(candidateInstCurr[0]);
 
       if ((!lastDefCurr) ||
           (lastDef && (instMap[lastDefCurr] < instMap[lastDef])))

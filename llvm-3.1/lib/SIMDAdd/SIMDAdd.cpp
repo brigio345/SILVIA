@@ -73,7 +73,7 @@ Instruction *getFirstValueUse(Instruction *inst) {
   return firstUse;
 }
 
-void anticipateDefs(Instruction *inst) {
+void anticipateDefs(Instruction *inst, bool anticipateInst = false) {
   BasicBlock *instBB = inst->getParent();
   for (unsigned i = 0; i < inst->getNumOperands(); ++i) {
     Value *op = inst->getOperand(i);
@@ -81,8 +81,11 @@ void anticipateDefs(Instruction *inst) {
     if (!opInst)
       continue;
     if (opInst->getParent() == instBB)
-      anticipateDefs(opInst);
+      anticipateDefs(opInst, true);
   }
+
+  if (!anticipateInst)
+    return;
 
   Instruction *insertionPoint = instBB->getFirstNonPHI();
   auto lastDef = getLastOperandDef(inst);

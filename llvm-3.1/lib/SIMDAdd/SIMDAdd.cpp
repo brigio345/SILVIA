@@ -165,6 +165,11 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
   std::list<SmallVector<Instruction *, 1>> candidateInsts;
   getSIMDableInstructions(BB, candidateInsts);
 
+  for (auto &candidateInstCurr : candidateInsts) {
+    anticipateDefs(candidateInstCurr[0]);
+    // posticipateUses(inst);
+  }
+
   // Build tuples of 4 instructions that can be mapped to the
   // same SIMD DSP.
   // TODO: check if a size of 8 is a good choice
@@ -173,10 +178,6 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
-    for (auto &candidateInstCurr : candidateInsts) {
-      anticipateDefs(candidateInstCurr[0]);
-      // posticipateUses(inst);
-    }
     DenseMap<Instruction *, int> instMap;
     getInstMap(&BB, instMap);
     for (auto &candidateInstCurr : candidateInsts) {

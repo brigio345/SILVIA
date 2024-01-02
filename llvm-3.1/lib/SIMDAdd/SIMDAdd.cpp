@@ -95,6 +95,27 @@ void anticipateDefs(Instruction *inst, bool anticipateInst = false) {
   inst->moveBefore(insertionPoint);
 }
 
+void posticipateUses(Instruction *inst, bool posticipateInst = false) {
+  BasicBlock *instBB = inst->getParent();
+  for (auto UI = inst->use_begin(), UE = inst->use_end(); UI != UE; ++UI) {
+    Value *user = *UI;
+    auto userInst = dyn_cast<Instruction>(user);
+    if (!userInst)
+      continue;
+    if (userInst->getParent() == instBB)
+      posticipateUses(userInst, true);
+  }
+
+  if (!posticipateInst)
+    return;
+
+  Instruction *insertionPoint = getFirstValueUse(inst);
+  if (!insertionPoint)
+    insertionPoint = instBB->getTerminator();
+
+  inst->moveBefore(insertionPoint);
+}
+
 // Collect all the add instructions.
 void getSIMDableInstructions(
     BasicBlock &BB, std::list<SmallVector<Instruction *, 1>> &candidateInsts) {
@@ -169,10 +190,11 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
   getSIMDableInstructions(BB, candidateInsts);
 
   candidateInsts.reverse();
-  for (auto &candidateInstCurr : candidateInsts) {
+  for (auto &candidateInstCurr : candidateInsts)
     anticipateDefs(candidateInstCurr[0]);
-    // posticipateUses(inst);
-  }
+  candidateInsts.reverse();
+  for (auto &candidateInstCurr : candidateInsts)
+    posticipateUses(candidateInstCurr[0]);
 
   // Build tuples of 4 instructions that can be mapped to the
   // same SIMD DSP.

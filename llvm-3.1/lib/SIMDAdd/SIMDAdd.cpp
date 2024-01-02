@@ -168,6 +168,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
   std::list<SmallVector<Instruction *, 1>> candidateInsts;
   getSIMDableInstructions(BB, candidateInsts);
 
+  candidateInsts.reverse();
   for (auto &candidateInstCurr : candidateInsts) {
     anticipateDefs(candidateInstCurr[0]);
     // posticipateUses(inst);

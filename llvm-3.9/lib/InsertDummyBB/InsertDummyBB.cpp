@@ -1,4 +1,3 @@
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/XILINXLoopInfoUtils.h"
 #include "llvm/IR/Function.h"
@@ -110,9 +109,7 @@ bool InsertDummyBB::runOnModule(Module &M) {
     for (Loop *L : LI) {
       if (isPipeline(L)) {
         IRBuilder<> builder(F.getContext());
-        SmallVector<BasicBlock *, 8> exitBlocks;
-        L->getExitingBlocks(exitBlocks);
-        builder.SetInsertPoint(exitBlocks[0]->getTerminator());
+        builder.SetInsertPoint(L->getHeader()->getFirstNonPHI());
 
         StructType *ap_int48 = M.getTypeByName("struct.ap_int<48>");
 

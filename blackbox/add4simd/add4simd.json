@@ -1,12 +1,11 @@
 {
-  "c_function_name"     : "dsp_add_4simd_pipe_l0",
-  "rtl_top_module_name" : "dsp_add_4simd_pipe_l0",
+  "c_function_name"     : "add4simd",
+  "rtl_top_module_name" : "add4simd",
   "c_files" : [{ 
-    "c_file" : "../blackbox/dsp_add_simd.cc",
-    "cflag" : "-I../blackbox"
+    "c_file" : "blackbox/add4simd/add4simd.cpp"
   }],
   "rtl_files" : [
-    "../blackbox/dsp_add_4simd_pipe_l0.v"
+    "blackbox/add4simd/add4simd.v"
   ],
   "c_parameters" : [{
     "c_name" : "a",

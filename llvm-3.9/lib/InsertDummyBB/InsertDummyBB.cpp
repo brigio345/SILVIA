@@ -41,7 +41,7 @@ StringRef InsertDummyBB::_getBBName(Module &M) const {
   for (Function &F : M) {
     if (F.empty())
       continue;
-    if (std::string(F.getName()).find("dsp_add_4simd_pipe_l0") !=
+    if (std::string(F.getName()).find("add4simd") !=
         std::string::npos) {
       BBName = F.getName();
 #ifdef INSERT_DUMMY_DB_DEBUG_

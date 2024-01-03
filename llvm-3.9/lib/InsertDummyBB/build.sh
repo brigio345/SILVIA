@@ -20,7 +20,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-source `dirname -- $0`/../../setup-vitis-hls-llvm.sh
+source `dirname -- $0`/../../setup_hls_llvm.sh
 
 clang_path=$XILINX_HLS/lnx64/tools/clang-3.9-csynth
 echo "Using Vitis HLS clang/opt: $clang_path/bin"

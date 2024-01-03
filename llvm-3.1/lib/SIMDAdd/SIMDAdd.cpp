@@ -1,5 +1,6 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/BasicBlock.h"
 #include "llvm/Function.h"
 #include "llvm/Instructions.h"
@@ -18,6 +19,17 @@ struct SIMDAdd : public BasicBlockPass {
   SIMDAdd() : BasicBlockPass(ID) {}
 
   bool runOnBasicBlock(BasicBlock &BB) override;
+
+  virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.addRequired<AliasAnalysis>();
+  }
+
+  void anticipateDefs(Instruction *inst, bool anticipateInst);
+  void posticipateUses(Instruction *inst, bool posticipateInst);
+  bool isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
+                     Instruction *lastInst);
+
+  AliasAnalysis *AA;
 };
 
 char SIMDAdd::ID = 0;
@@ -30,9 +42,16 @@ static cl::opt<std::string>
            cl::desc("The operation to map to SIMD DSPs. "
                     "Possible values are: add4simd."));
 
-Instruction *getLastOperandDef(Instruction *inst,
-                               DenseMap<Instruction *, int> &instMap) {
+void getInstMap(BasicBlock *BB, DenseMap<Instruction *, int> &instMap) {
+  for (auto &inst : *BB)
+    instMap[&inst] = instMap.size();
+}
+
+Instruction *getLastOperandDef(Instruction *inst) {
   BasicBlock *instBB = inst->getParent();
+
+  DenseMap<Instruction *, int> instMap;
+  getInstMap(instBB, instMap);
 
   Instruction *lastDef = nullptr;
   for (unsigned i = 0; i < inst->getNumOperands(); ++i) {
@@ -47,9 +66,11 @@ Instruction *getLastOperandDef(Instruction *inst,
   return lastDef;
 }
 
-Instruction *getFirstValueUse(Instruction *inst,
-                              DenseMap<Instruction *, int> &instMap) {
+Instruction *getFirstValueUse(Instruction *inst) {
   BasicBlock *instBB = inst->getParent();
+
+  DenseMap<Instruction *, int> instMap;
+  getInstMap(instBB, instMap);
 
   Instruction *firstUse = nullptr;
   for (auto UI = inst->use_begin(), UE = inst->use_end(); UI != UE; ++UI) {
@@ -62,6 +83,101 @@ Instruction *getFirstValueUse(Instruction *inst,
   }
 
   return firstUse;
+}
+
+bool SIMDAdd::isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
+                            Instruction *lastInst) {
+  auto loadToMove = dyn_cast<LoadInst>(instToMove);
+  auto storeToMove = dyn_cast<StoreInst>(instToMove);
+
+  if ((!loadToMove) && (!storeToMove))
+    return true;
+
+  AliasAnalysis::Location locToMove =
+      (storeToMove ? AA->getLocation(storeToMove)
+                   : AA->getLocation(loadToMove));
+
+  bool toCheck = false;
+  for (auto &I : *(instToMove->getParent())) {
+    // Skip the instructions before the interval involved in the movement.
+    if ((!toCheck) && (&I != firstInst))
+      continue;
+    toCheck = true;
+
+    // Skip the instructions after the interval involved in the movement.
+    if (&I == lastInst)
+      break;
+
+    if (auto store = dyn_cast<StoreInst>(&I)) {
+      auto loc = AA->getLocation(store);
+
+      if (AA->alias(locToMove, loc) != AliasAnalysis::AliasResult::NoAlias)
+        return false;
+    }
+
+    // If a load aliases with another load is not an issue. There is no need to
+    // check.
+    if (loadToMove)
+      continue;
+
+    if (auto load = dyn_cast<LoadInst>(&I)) {
+      auto loc = AA->getLocation(load);
+
+      if (AA->alias(locToMove, loc) != AliasAnalysis::AliasResult::NoAlias)
+        return false;
+    }
+  }
+
+  return true;
+}
+
+void SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
+  BasicBlock *instBB = inst->getParent();
+  for (unsigned i = 0; i < inst->getNumOperands(); ++i) {
+    Value *op = inst->getOperand(i);
+    auto opInst = dyn_cast<Instruction>(op);
+    if (!opInst)
+      continue;
+    if (opInst->getParent() == instBB)
+      anticipateDefs(opInst, true);
+  }
+
+  if (!anticipateInst)
+    return;
+
+  Instruction *insertionPoint = instBB->getFirstNonPHI();
+  auto lastDef = getLastOperandDef(inst);
+  if (lastDef)
+    insertionPoint = lastDef->getNextNode();
+
+  if (!isMoveMemSafe(inst, insertionPoint, inst))
+    return;
+
+  inst->moveBefore(insertionPoint);
+}
+
+void SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
+  BasicBlock *instBB = inst->getParent();
+  for (auto UI = inst->use_begin(), UE = inst->use_end(); UI != UE; ++UI) {
+    Value *user = *UI;
+    auto userInst = dyn_cast<Instruction>(user);
+    if (!userInst)
+      continue;
+    if (userInst->getParent() == instBB)
+      posticipateUses(userInst, true);
+  }
+
+  if (!posticipateInst)
+    return;
+
+  Instruction *insertionPoint = getFirstValueUse(inst);
+  if (!insertionPoint)
+    insertionPoint = instBB->getTerminator();
+
+  if (!isMoveMemSafe(inst, inst, insertionPoint))
+    return;
+
+  inst->moveBefore(insertionPoint);
 }
 
 // Collect all the add instructions.
@@ -132,17 +248,19 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
 
   LLVMContext &context = F->getContext();
 
+  AA = &getAnalysis<AliasAnalysis>();
+
   bool modified = false;
 
   std::list<SmallVector<Instruction *, 1>> candidateInsts;
   getSIMDableInstructions(BB, candidateInsts);
 
-  // TODO: Maybe use DominatorTree? (It may be an overkill)
-  // DominatorTree DT(F);
-  // if (DT.dominates(inst0, inst1)) {...}
-  DenseMap<Instruction *, int> instMap;
-  for (auto &inst : BB)
-    instMap[&inst] = instMap.size();
+  candidateInsts.reverse();
+  for (auto &candidateInstCurr : candidateInsts)
+    anticipateDefs(candidateInstCurr[0]);
+  candidateInsts.reverse();
+  for (auto &candidateInstCurr : candidateInsts)
+    posticipateUses(candidateInstCurr[0]);
 
   // Build tuples of 4 instructions that can be mapped to the
   // same SIMD DSP.
@@ -152,11 +270,11 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
+    DenseMap<Instruction *, int> instMap;
+    getInstMap(&BB, instMap);
     for (auto &candidateInstCurr : candidateInsts) {
-      Instruction *lastDefCurr =
-          getLastOperandDef(candidateInstCurr[0], instMap);
-      Instruction *firstUseCurr =
-          getFirstValueUse(candidateInstCurr[0], instMap);
+      Instruction *lastDefCurr = getLastOperandDef(candidateInstCurr[0]);
+      Instruction *firstUseCurr = getFirstValueUse(candidateInstCurr[0]);
 
       if ((!lastDefCurr) ||
           (lastDef && (instMap[lastDefCurr] < instMap[lastDef])))

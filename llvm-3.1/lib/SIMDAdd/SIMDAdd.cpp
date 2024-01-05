@@ -32,6 +32,11 @@ struct SIMDAdd : public BasicBlockPass {
   AliasAnalysis *AA;
 };
 
+struct CandidateInst {
+  SmallVector<Instruction *, 2> inInsts;
+  SmallVector<Instruction *, 1> outInsts;
+};
+
 char SIMDAdd::ID = 0;
 static RegisterPass<SIMDAdd> X("simd-add", "Map add instructions to SIMD DSPs",
                                false /* Only looks at CFG */,
@@ -181,28 +186,32 @@ void SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
 }
 
 // Collect all the add instructions.
-void getSIMDableInstructions(
-    BasicBlock &BB, std::list<SmallVector<Instruction *, 1>> &candidateInsts) {
+void getSIMDableInstructions(BasicBlock &BB,
+                             std::list<CandidateInst> &candidateInsts) {
   for (auto &I : BB) {
     if (I.getOpcode() != Instruction::Add)
       continue;
-    if (cast<IntegerType>(I.getType())->getBitWidth() <= 12)
-      candidateInsts.push_back(SmallVector<Instruction *, 1>(1, &I));
+    if (cast<IntegerType>(I.getType())->getBitWidth() <= 12) {
+      CandidateInst candidate;
+      candidate.inInsts.push_back(&I);
+      candidate.outInsts.push_back(&I);
+      candidateInsts.push_back(candidate);
+    }
     // TODO: collect candidates for simd2
     // else if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 24)
     // simd2Candidates.push_back(binOp);
   }
 }
 
-void replaceInstsWithSIMDCall(
-    SmallVector<SmallVector<Instruction *, 1>, 4> instTuple,
-    Instruction *insertBefore, Function *SIMDFunc, LLVMContext &context) {
+void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
+                              Instruction *insertBefore, Function *SIMDFunc,
+                              LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
   Value *args[2] = {nullptr};
   for (unsigned i = 0; i < instTuple.size(); ++i) {
-    for (unsigned j = 0; j < instTuple[i][0]->getNumOperands(); ++j) {
-      Value *arg = builder.CreateZExt(instTuple[i][0]->getOperand(j),
+    for (unsigned j = 0; j < instTuple[i].inInsts[0]->getNumOperands(); ++j) {
+      Value *arg = builder.CreateZExt(instTuple[i].inInsts[0]->getOperand(j),
                                       IntegerType::get(context, 48));
       int shift_amount = (12 * i);
       if (shift_amount > 0) {
@@ -223,14 +232,14 @@ void replaceInstsWithSIMDCall(
                                 ? builder.CreateLShr(sum_concat, shift_amount)
                                 : sum_concat;
 
-    result[i] = builder.CreateTrunc(
-        result_shifted, instTuple[i][instTuple[i].size() - 1]->getType());
+    result[i] = builder.CreateTrunc(result_shifted,
+                                    instTuple[i].outInsts[0]->getType());
   }
 
   // Replace the add instruction with the result
   for (unsigned i = 0; i < instTuple.size(); ++i) {
-    instTuple[i][instTuple[i].size() - 1]->replaceAllUsesWith(result[i]);
-    instTuple[i][instTuple[i].size() - 1]->eraseFromParent();
+    instTuple[i].outInsts[0]->replaceAllUsesWith(result[i]);
+    instTuple[i].outInsts[0]->eraseFromParent();
   }
 }
 
@@ -252,29 +261,33 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
 
   bool modified = false;
 
-  std::list<SmallVector<Instruction *, 1>> candidateInsts;
+  std::list<CandidateInst> candidateInsts;
   getSIMDableInstructions(BB, candidateInsts);
 
   candidateInsts.reverse();
   for (auto &candidateInstCurr : candidateInsts)
-    anticipateDefs(candidateInstCurr[0]);
+    anticipateDefs(candidateInstCurr.inInsts[0]);
   candidateInsts.reverse();
   for (auto &candidateInstCurr : candidateInsts)
-    posticipateUses(candidateInstCurr[0]);
+    posticipateUses(candidateInstCurr.outInsts[0]);
 
   // Build tuples of 4 instructions that can be mapped to the
   // same SIMD DSP.
   // TODO: check if a size of 8 is a good choice
   while (!candidateInsts.empty()) {
-    SmallVector<SmallVector<Instruction *, 1>, 4> instTuple;
+    SmallVector<CandidateInst, 4> instTuple;
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
     DenseMap<Instruction *, int> instMap;
     getInstMap(&BB, instMap);
-    for (auto &candidateInstCurr : candidateInsts) {
-      Instruction *lastDefCurr = getLastOperandDef(candidateInstCurr[0]);
-      Instruction *firstUseCurr = getFirstValueUse(candidateInstCurr[0]);
+    for (auto CI = candidateInsts.begin(), CE = candidateInsts.end();
+         CI != CE;) {
+      CandidateInst candidateInstCurr = *CI;
+      Instruction *lastDefCurr =
+          getLastOperandDef(candidateInstCurr.inInsts[0]);
+      Instruction *firstUseCurr =
+          getFirstValueUse(candidateInstCurr.outInsts[0]);
 
       if ((!lastDefCurr) ||
           (lastDef && (instMap[lastDefCurr] < instMap[lastDef])))
@@ -287,8 +300,10 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       // If firstUseCurr is before lastDefCurr this pair of instructions is not
       // compatible with current tuple.
       if (firstUseCurr && lastDefCurr &&
-          (instMap[firstUseCurr] < instMap[lastDefCurr]))
+          (instMap[firstUseCurr] < instMap[lastDefCurr])) {
+        CI++;
         continue;
+      }
 
       instTuple.push_back(candidateInstCurr);
 
@@ -296,14 +311,11 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       firstUse = firstUseCurr;
       lastDef = lastDefCurr;
 
+      // The current candidate was selected: it is not a candidate anymore.
+      candidateInsts.erase(CI++);
+
       if (instTuple.size() == 4)
         break;
-    }
-
-    // Remove the selected instructions from the candidates.
-    for (auto &inst : instTuple) {
-      candidateInsts.erase(
-          std::find(candidateInsts.begin(), candidateInsts.end(), inst));
     }
 
     // TODO: maybe also skip tuples of size 2?

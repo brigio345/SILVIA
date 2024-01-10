@@ -62,6 +62,8 @@ void getCandidates(BasicBlock &BB, std::list<CandidateInst> &candidateInsts) {
 
     for (unsigned i = 0; i < I.getNumOperands(); ++i) {
       auto opInst = dyn_cast<Instruction>(I.getOperand(i));
+      if (!opInst)
+        continue;
 
       if (opInst->getOpcode() == Instruction::SExt)
         opInst = dyn_cast<Instruction>(opInst->getOperand(0));

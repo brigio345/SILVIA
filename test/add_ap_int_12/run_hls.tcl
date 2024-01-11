@@ -15,7 +15,7 @@ set_part "xczu3eg-ubva530-2L-e"
 
 create_clock -period "300MHz"
 
-csynth_design_simd ${PROJ_NAME}/solution1 ../../llvm-3.1/llvm/install ../..
+csynth_design_simd "add4simd" ${PROJ_NAME}/solution1 ../../llvm-3.1/llvm/install ../..
 
 cosim_design
 

@@ -1,3 +1,4 @@
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/XILINXLoopInfoUtils.h"
 #include "llvm/IR/Function.h"
@@ -5,6 +6,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Pass.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 #include <string>
 
@@ -12,6 +14,9 @@
 using namespace llvm;
 
 namespace {
+static cl::opt<std::string>
+    BBFnName("insert-dummy-bb-fn", cl::ValueRequired,
+             cl::desc("The name of the blackbox function to call."));
 
 const std::string BEGIN_SEP(std::string("\n\n") + std::string(80, '>') +
                             std::string("\n\n"));
@@ -41,8 +46,7 @@ StringRef InsertDummyBB::_getBBName(Module &M) const {
   for (Function &F : M) {
     if (F.empty())
       continue;
-    if (std::string(F.getName()).find("add4simd") !=
-        std::string::npos) {
+    if (std::string(F.getName()).find(BBFnName) != std::string::npos) {
       BBName = F.getName();
 #ifdef INSERT_DUMMY_DB_DEBUG_
       dbgs() << BEGIN_SEP << "Found the BB declaration: " << F.getName()
@@ -111,13 +115,13 @@ bool InsertDummyBB::runOnModule(Module &M) {
         IRBuilder<> builder(F.getContext());
         builder.SetInsertPoint(L->getHeader()->getFirstNonPHI());
 
-        StructType *ap_int48 = M.getTypeByName("struct.ap_int<48>");
+        SmallVector<Value *, 8> vals;
+        vals.push_back(builder.CreateAlloca(
+            BBFn->getArg(0)->getType()->getPointerElementType()));
+        for (int i = 1; i < BBFn->arg_size(); i++)
+          vals.push_back(UndefValue::get(BBFn->getArg(i)->getType()));
 
-        Value *retVal = builder.CreateAlloca(ap_int48);
-        Value *val0 = builder.CreateAlloca(ap_int48);
-        Value *val1 = builder.CreateAlloca(ap_int48);
-
-        builder.CreateCall(BBFn, {retVal, val0, val1});
+        builder.CreateCall(BBFn, vals);
         finished = true;
 #ifdef INSERT_DUMMY_DB_DEBUG_
         dbgs() << BEGIN_SEP << "Inserted dummy call." << END_SEP;
@@ -135,7 +139,7 @@ bool InsertDummyBB::runOnModule(Module &M) {
 #endif // INSERT_DUMMY_DB_DEBUG_
   return finished;
 }
-}
+} // namespace
 
 char InsertDummyBB::ID = 0;
 static RegisterPass<InsertDummyBB>

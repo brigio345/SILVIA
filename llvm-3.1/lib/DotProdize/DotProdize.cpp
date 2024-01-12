@@ -201,6 +201,42 @@ void getCandidates(BasicBlock &BB, std::list<CandidateInst> &candidateInsts) {
   }
 }
 
+void replaceTreeWithDotProds(Instruction *addRoot,
+                             SmallVector<Instruction *, 8> &mulLeafs,
+                             Function *dotProd, LLVMContext &context) {
+  IRBuilder<> builder(addRoot);
+
+  SmallVector<Instruction *, 3> muls;
+  Instruction *rootNew = nullptr;
+  for (unsigned i = 0; i < mulLeafs.size();) {
+    Instruction *rootCurr = nullptr;
+    if ((i + 3) <= mulLeafs.size()) {
+      SmallVector<Value *, 6> args;
+      for (unsigned j = 0; j < 3; ++j) {
+        args.push_back(cast<Instruction>(builder.CreateTrunc(
+            mulLeafs[i + j]->getOperand(0), IntegerType::get(context, 8))));
+        args.push_back(cast<Instruction>(builder.CreateTrunc(
+            mulLeafs[i + j]->getOperand(1), IntegerType::get(context, 8))));
+      }
+      rootCurr = cast<Instruction>(builder.CreateSExt(
+          builder.CreateCall(dotProd, args), IntegerType::get(context, 58)));
+
+      i += 3;
+    } else {
+      rootCurr = cast<Instruction>(
+          builder.CreateSExt(mulLeafs[i], IntegerType::get(context, 58)));
+
+      i++;
+    }
+
+    rootNew = (rootNew ? cast<Instruction>(builder.CreateAdd(rootNew, rootCurr))
+                       : rootCurr);
+  }
+
+  addRoot->replaceAllUsesWith(builder.CreateTrunc(rootNew, addRoot->getType()));
+  addRoot->eraseFromParent();
+}
+
 void replaceCandidateWithDotProdCall(CandidateInst &candidate,
                                      Function *DotProdFunc,
                                      LLVMContext &context) {
@@ -242,7 +278,7 @@ bool DotProdize::runOnBasicBlock(BasicBlock &BB) {
 
   SmallVector<SmallVector<Instruction *, 8>, 8> mulLeafsCandidates;
   SmallVector<SmallVector<Instruction *, 8>, 8> addInternalCandidates;
-  SmallVector<Instruction *, 8> addRoots;
+  SmallVector<Instruction *, 8> addRootCandidates;
   // Iterate in reverse order to avoid collecting subset trees.
   for (auto II = BB.end(), IB = BB.begin(); II != IB; --II) {
     Instruction *I = II;
@@ -267,13 +303,15 @@ bool DotProdize::runOnBasicBlock(BasicBlock &BB) {
       if (getDotProdTree(I, mulLeafs, addInternal)) {
         mulLeafsCandidates.push_back(mulLeafs);
         addInternalCandidates.push_back(addInternal);
-        addRoots.push_back(I);
+        addRootCandidates.push_back(I);
       }
     }
   }
 
-  for (auto &candidate : candidates)
-    replaceCandidateWithDotProdCall(candidate, DotProdFunc, context);
+  for (unsigned i = 0; i < addRootCandidates.size(); ++i) {
+    replaceTreeWithDotProds(addRootCandidates[i], mulLeafsCandidates[i],
+                            DotProdFunc, context);
+  }
 
   return (candidates.size() > 0);
 }

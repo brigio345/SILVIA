@@ -29,6 +29,36 @@ static RegisterPass<DotProdize> X("dot-prod-ize",
                                   false /* Only looks at CFG */,
                                   true /* Transformation Pass */);
 
+bool getDotProdLeafs(Instruction *addRoot,
+                     SmallVector<Instruction *, 3> &mulLeafs) {
+  if (addRoot->getOpcode() != Instruction::Add)
+    return false;
+
+  for (unsigned i = 0; i < addRoot->getNumOperands(); ++i) {
+    auto op = dyn_cast<Instruction>(addRoot->getOperand(i));
+    if (!op)
+      return false;
+
+    if (op->getOpcode() == Instruction::SExt)
+      op = dyn_cast<Instruction>(op->getOperand(0));
+    if (!op)
+      return false;
+
+    auto opOpcode = op->getOpcode();
+
+    if (opOpcode == Instruction::Mul) {
+      mulLeafs.push_back(op);
+    } else if (opOpcode == Instruction::Add) {
+      if (!getDotProdLeafs(op, mulLeafs))
+        return false;
+    } else {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // Collect all the add instructions.
 void getCandidates(BasicBlock &BB, std::list<CandidateInst> &candidateInsts) {
   // TODO: manage constant operands.

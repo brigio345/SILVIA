@@ -44,7 +44,7 @@ bool getDotProdTree(Instruction *addRoot,
       op = dyn_cast<Instruction>(op->getOperand(0));
     if (!op)
       return false;
-    
+
     // The tree cannot absorb an op with multiple uses, since its value is
     // needed elsewhere too.
     if (!op->hasOneUse())
@@ -239,6 +239,38 @@ bool DotProdize::runOnBasicBlock(BasicBlock &BB) {
 
   std::list<CandidateInst> candidates;
   getCandidates(BB, candidates);
+
+  SmallVector<SmallVector<Instruction *, 8>, 8> mulLeafsCandidates;
+  SmallVector<SmallVector<Instruction *, 8>, 8> addInternalCandidates;
+  SmallVector<Instruction *, 8> addRoots;
+  // Iterate in reverse order to avoid collecting subset trees.
+  for (auto II = BB.end(), IB = BB.begin(); II != IB; --II) {
+    Instruction *I = II;
+    if (I->getOpcode() == Instruction::Add) {
+      bool subset = false;
+      for (auto &addInternal : addInternalCandidates) {
+        for (auto &add : addInternal) {
+          if (add == I) {
+            subset = true;
+            break;
+          }
+        }
+        if (subset)
+          break;
+      }
+
+      if (subset)
+        continue;
+
+      SmallVector<Instruction *, 8> mulLeafs;
+      SmallVector<Instruction *, 8> addInternal;
+      if (getDotProdTree(I, mulLeafs, addInternal)) {
+        mulLeafsCandidates.push_back(mulLeafs);
+        addInternalCandidates.push_back(addInternal);
+        addRoots.push_back(I);
+      }
+    }
+  }
 
   for (auto &candidate : candidates)
     replaceCandidateWithDotProdCall(candidate, DotProdFunc, context);

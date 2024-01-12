@@ -44,14 +44,15 @@ bool getDotProdLeafs(Instruction *addRoot,
     if (!op)
       return false;
 
-    auto opOpcode = op->getOpcode();
-
-    if (opOpcode == Instruction::Mul) {
+    switch (op->getOpcode()) {
+    case Instruction::Mul:
       mulLeafs.push_back(op);
-    } else if (opOpcode == Instruction::Add) {
+      break;
+    case Instruction::Add:
       if (!getDotProdLeafs(op, mulLeafs))
         return false;
-    } else {
+      break;
+    default:
       return false;
     }
   }

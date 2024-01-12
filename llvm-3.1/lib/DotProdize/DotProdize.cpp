@@ -29,8 +29,9 @@ static RegisterPass<DotProdize> X("dot-prod-ize",
                                   false /* Only looks at CFG */,
                                   true /* Transformation Pass */);
 
-bool getDotProdLeafs(Instruction *addRoot,
-                     SmallVector<Instruction *, 3> &mulLeafs) {
+bool getDotProdTree(Instruction *addRoot,
+                    SmallVector<Instruction *, 8> &mulLeafs,
+                    SmallVector<Instruction *, 8> &addInternal) {
   if (addRoot->getOpcode() != Instruction::Add)
     return false;
 
@@ -49,8 +50,9 @@ bool getDotProdLeafs(Instruction *addRoot,
       mulLeafs.push_back(op);
       break;
     case Instruction::Add:
-      if (!getDotProdLeafs(op, mulLeafs))
+      if (!getDotProdTree(op, mulLeafs, addInternal))
         return false;
+      addInternal.push_back(op);
       break;
     default:
       return false;

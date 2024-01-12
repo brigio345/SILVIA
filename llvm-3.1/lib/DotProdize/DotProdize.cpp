@@ -44,6 +44,11 @@ bool getDotProdTree(Instruction *addRoot,
       op = dyn_cast<Instruction>(op->getOperand(0));
     if (!op)
       return false;
+    
+    // The tree cannot absorb an op with multiple uses, since its value is
+    // needed elsewhere too.
+    if (!op->hasOneUse())
+      return false;
 
     switch (op->getOpcode()) {
     case Instruction::Mul:

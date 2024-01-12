@@ -19,8 +19,8 @@ struct DotProdize : public BasicBlockPass {
 };
 
 struct CandidateInst {
-  SmallVector<Instruction *, 2> inInsts;
-  SmallVector<Instruction *, 1> outInsts;
+  SmallVector<Value *, 6> inputs;
+  SmallVector<Value *, 1> outputs;
 };
 
 char DotProdize::ID = 0;
@@ -55,7 +55,7 @@ void getCandidates(BasicBlock &BB, std::list<CandidateInst> &candidateInsts) {
     if (I.getOpcode() != Instruction::Add)
       continue;
 
-    candidate.outInsts.push_back(&I);
+    candidate.outputs.push_back(&I);
 
     // Search for m_2.
     auto m2Branch = -1;
@@ -86,13 +86,14 @@ void getCandidates(BasicBlock &BB, std::list<CandidateInst> &candidateInsts) {
           if (cast<IntegerType>(op1in->getType())->getBitWidth() > 8)
             continue;
 
-          candidate.inInsts.push_back(op0);
-          candidate.inInsts.push_back(op1);
+          candidate.inputs.push_back(op0->getOperand(0));
+          candidate.inputs.push_back(op1->getOperand(0));
           m2Branch = i;
           break;
         } else {
           m2Branch = i;
-          candidate.inInsts.push_back(opInst);
+          candidate.inputs.push_back(opInst->getOperand(0));
+          candidate.inputs.push_back(opInst->getOperand(1));
           break;
         }
       }
@@ -151,14 +152,39 @@ void getCandidates(BasicBlock &BB, std::list<CandidateInst> &candidateInsts) {
           break;
         }
 
-        candidate.inInsts.push_back(op0);
-        candidate.inInsts.push_back(op1);
+        candidate.inputs.push_back(op0->getOperand(0));
+        candidate.inputs.push_back(op1->getOperand(0));
       } else {
-        candidate.inInsts.push_back(opInst);
+        candidate.inputs.push_back(opInst->getOperand(0));
+        candidate.inputs.push_back(opInst->getOperand(1));
       }
     }
     candidateInsts.push_back(candidate);
   }
+}
+
+void replaceCandidateWithDotProdCall(CandidateInst &candidate,
+                                     Function *DotProdFunc,
+                                     LLVMContext &context) {
+  auto output = dyn_cast<Instruction>(candidate.outputs[0]);
+
+  IRBuilder<> builder(output);
+
+  Value *args[6];
+  Value **argPtr = &args[0];
+  for (auto &input : candidate.inputs)
+    *(argPtr++) = input;
+
+  Value *dotProd = builder.CreateCall(DotProdFunc, args);
+
+  auto outType = dyn_cast<IntegerType>(output->getType());
+  auto outSize = outType->getBitWidth();
+  // Replace the add instruction with the result
+  if (outSize < 58)
+    dotProd = builder.CreateTrunc(dotProd, outType);
+
+  output->replaceAllUsesWith(dotProd);
+  output->eraseFromParent();
 }
 
 bool DotProdize::runOnBasicBlock(BasicBlock &BB) {
@@ -168,19 +194,16 @@ bool DotProdize::runOnBasicBlock(BasicBlock &BB) {
 
   // Get the SIMD function
   Module *module = F->getParent();
-  // Function *DotProdFunc = module->getFunction("dotprod");
-  // assert(DotProdFunc && "SIMD function not found");
+  Function *DotProdFunc = module->getFunction("dotprod");
+  assert(DotProdFunc && "dotprod function not found");
 
   LLVMContext &context = F->getContext();
 
-  bool modified = false;
+  std::list<CandidateInst> candidates;
+  getCandidates(BB, candidates);
 
-  std::list<CandidateInst> candidateInsts;
-  getCandidates(BB, candidateInsts);
+  for (auto &candidate : candidates)
+    replaceCandidateWithDotProdCall(candidate, DotProdFunc, context);
 
-  for (auto &candidate : candidateInsts) {
-    // TODO: replace each candidate with a call to dotprod
-  }
-
-  return (candidateInsts.size() > 0);
+  return (candidates.size() > 0);
 }

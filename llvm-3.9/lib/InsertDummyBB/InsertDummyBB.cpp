@@ -17,6 +17,9 @@ namespace {
 static cl::opt<std::string>
     BBFnName("insert-dummy-bb-fn", cl::ValueRequired,
              cl::desc("The name of the blackbox function to call."));
+static cl::opt<std::string>
+    BBTopName("insert-dummy-bb-top", cl::ValueRequired,
+             cl::desc("The name function where to insert the blackbox call."));
 
 const std::string BEGIN_SEP(std::string("\n\n") + std::string(80, '>') +
                             std::string("\n\n"));
@@ -107,7 +110,7 @@ bool InsertDummyBB::runOnModule(Module &M) {
   }
 
   for (Function &F : M) {
-    if (F.getName() == BBFn->getName() || F.empty() || F.isDeclaration())
+    if (F.getName() != BBTopName || F.empty() || F.isDeclaration())
       continue;
     LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
     for (Loop *L : LI) {

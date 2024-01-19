@@ -119,7 +119,7 @@ bool InsertDummyBB::runOnModule(Module &M) {
         vals.push_back(builder.CreateAlloca(
             BBFn->getArg(0)->getType()->getPointerElementType()));
         for (int i = 1; i < BBFn->arg_size(); i++)
-          vals.push_back(UndefValue::get(BBFn->getArg(i)->getType()));
+          vals.push_back(Constant::getNullValue(BBFn->getArg(i)->getType()));
 
         builder.CreateCall(BBFn, vals);
         finished = true;

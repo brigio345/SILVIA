@@ -105,7 +105,7 @@ bool InsertDummyBB::runOnModule(Module &M) {
 
   auto BBFn = M.getFunction(BBName);
   if (!BBFn) {
-    dbgs() << "ERROR: Could not look up the function.\n";
+    dbgs() << "ERROR: Could not find function" << BBName << ".\n";
     return false;
   }
 

@@ -8,6 +8,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Utils/XILINXLoopUtils.h"
 #include <string>
 
 #define INSERT_DUMMY_DB_DEBUG_
@@ -19,7 +20,7 @@ static cl::opt<std::string>
              cl::desc("The name of the blackbox function to call."));
 static cl::opt<std::string>
     BBTopName("insert-dummy-bb-top", cl::ValueRequired,
-             cl::desc("The name function where to insert the blackbox call."));
+              cl::desc("The name function where to insert the blackbox call."));
 
 const std::string BEGIN_SEP(std::string("\n\n") + std::string(80, '>') +
                             std::string("\n\n"));
@@ -112,29 +113,51 @@ bool InsertDummyBB::runOnModule(Module &M) {
   for (Function &F : M) {
     if (F.getName() != BBTopName || F.empty() || F.isDeclaration())
       continue;
-    LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
-    for (Loop *L : LI) {
-      if (isPipeline(L)) {
-        IRBuilder<> builder(F.getContext());
-        builder.SetInsertPoint(L->getHeader()->getFirstNonPHI());
 
-        SmallVector<Value *, 8> vals;
-        vals.push_back(builder.CreateAlloca(
-            BBFn->getArg(0)->getType()->getPointerElementType()));
-        for (int i = 1; i < BBFn->arg_size(); i++)
-          vals.push_back(Constant::getNullValue(BBFn->getArg(i)->getType()));
+    LLVMContext &context = F.getContext();
 
-        builder.CreateCall(BBFn, vals);
-        finished = true;
-#ifdef INSERT_DUMMY_DB_DEBUG_
-        dbgs() << BEGIN_SEP << "Inserted dummy call." << END_SEP;
-#endif // INSERT_DUMMY_DB_DEBUG_
+    BasicBlock *originalEntry = &F.getEntryBlock();
+
+    BasicBlock *newBB =
+        BasicBlock::Create(context, "dummy", &F, &F.getEntryBlock());
+
+    // FIXME: loop should be freed (?)
+    Loop *loop = new Loop();
+    LoopInfo *LI = &getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
+    loop->addBasicBlockToLoop(newBB, *LI);
+
+    IRBuilder<> builder(context);
+    builder.SetInsertPoint(newBB);
+    SmallVector<Value *, 8> args;
+    args.push_back(builder.CreateAlloca(
+        BBFn->getArg(0)->getType()->getPointerElementType()));
+    for (int i = 1; i < BBFn->arg_size(); i++)
+      args.push_back(Constant::getNullValue(BBFn->getArg(i)->getType()));
+
+    // FIXME: do not set a random debug location just to generate valid IR.
+    auto call = builder.CreateCall(BBFn, args);
+    DebugLoc DL;
+    for (auto &BB : F) {
+      for (auto &I : BB) {
+        auto IDL = I.getDebugLoc();
+        if (IDL) {
+          DL = IDL;
+          break;
+        }
       }
-      if (finished)
+      if (DL)
         break;
     }
-    if (finished)
-      break;
+    call->setDebugLoc(DL);
+
+    builder.CreateBr(originalEntry);
+
+    LI->addTopLevelLoop(loop);
+
+    addPipeline(loop);
+    finished = true;
+
+    break;
   }
 #ifdef INSERT_DUMMY_DB_DEBUG_
   dbgs() << std::string(80, '-') << "\n\nExiting the pass...\n\n"

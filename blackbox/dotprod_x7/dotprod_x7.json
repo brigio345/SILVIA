@@ -17,10 +17,94 @@
     }
   },
   {
+    "c_name" : "a1",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "a1"
+    }
+  },
+  {
+    "c_name" : "a2",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "a2"
+    }
+  },
+  {
+    "c_name" : "a3",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "a3"
+    }
+  },
+  {
+    "c_name" : "a4",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "a4"
+    }
+  },
+  {
+    "c_name" : "a5",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "a5"
+    }
+  },
+  {
+    "c_name" : "a6",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "a6"
+    }
+  },
+  {
     "c_name" : "d0",
     "c_port_direction" : "in",
     "rtl_ports" : {
       "data_read_in" : "d0"
+    }
+  },
+  {
+    "c_name" : "d1",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "d1"
+    }
+  },
+  {
+    "c_name" : "d2",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "d2"
+    }
+  },
+  {
+    "c_name" : "d3",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "d3"
+    }
+  },
+  {
+    "c_name" : "d4",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "d4"
+    }
+  },
+  {
+    "c_name" : "d5",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "d5"
+    }
+  },
+  {
+    "c_name" : "d6",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "d6"
     }
   },
   {
@@ -31,10 +115,45 @@
     }
   },
   {
-    "c_name" : "partialIn",
+    "c_name" : "b1",
     "c_port_direction" : "in",
     "rtl_ports" : {
-      "data_read_in" : "partialIn"
+      "data_read_in" : "b1"
+    }
+  },
+  {
+    "c_name" : "b2",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "b2"
+    }
+  },
+  {
+    "c_name" : "b3",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "b3"
+    }
+  },
+  {
+    "c_name" : "b4",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "b4"
+    }
+  },
+  {
+    "c_name" : "b5",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "b5"
+    }
+  },
+  {
+    "c_name" : "b6",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "b6"
     }
   }
   ],
@@ -56,7 +175,7 @@
     "ap_ctrl_chain_protocol_continue" : ""
   },
   "rtl_performance" : {
-    "latency" : "4",
+    "latency" : "10",
     "II"      : "1"
   },
   "rtl_resource_usage" : {

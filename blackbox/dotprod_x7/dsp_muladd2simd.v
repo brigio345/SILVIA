@@ -14,7 +14,6 @@ reg signed [26:0] dReg;
 reg signed [17:0] bReg[1:0];
 reg signed [26:0] preAdd;
 reg signed [44:0] prod;
-reg signed [47:0] partialInReg[2:0];
 reg signed [47:0] partialOutReg;
 
 always @(posedge clk) begin
@@ -22,16 +21,13 @@ always @(posedge clk) begin
     aReg <= $signed(a);
     dReg <= $signed(d);
     bReg[0] <= $signed(b);
-    partialInReg[0] <= $signed(partialIn);
 
     preAdd <= aReg + dReg;
-    partialInReg[1] <= partialInReg[0];
     bReg[1] <= bReg[0];
 
     prod <= bReg[1] * preAdd;
-    partialInReg[2] <= partialInReg[1];
 
-    partialOutReg <= partialInReg[2] + prod;
+    partialOutReg <= partialIn + prod;
   end // ce
 end // clk
 

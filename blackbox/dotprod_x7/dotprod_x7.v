@@ -6,7 +6,7 @@ module dotprod_x7 (
   input [47:0] partialIn,
   output [47:0] partialOut);
 
-wire [28:0] _a0 = {a0[7], a0[7], a0[7], a0[7], a0, 18'b0};
+wire [26:0] _a0 = {a0[7], a0, 18'b0};
 
 wire [27:0] _d0;
 assign _d0[26:8] = {19{d0[7]}}; assign _d0[7:0] = d0;

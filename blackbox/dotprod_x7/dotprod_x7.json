@@ -1,0 +1,69 @@
+{
+  "c_function_name"     : "dotprod_x7",
+  "rtl_top_module_name" : "dotprod_x7",
+  "c_files" : [{ 
+    "c_file" : "blackbox/dotprod_x7/dotprod_x7.cpp"
+  }],
+  "rtl_files" : [
+    "blackbox/dotprod_x7/dotprod_x7.v",
+    "blackbox/dotprod_x7/dsp_muladd2simd.v"
+  ],
+  "c_parameters" : [
+  {
+    "c_name" : "a0",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "a0"
+    }
+  },
+  {
+    "c_name" : "d0",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "d0"
+    }
+  },
+  {
+    "c_name" : "b0",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "b0"
+    }
+  },
+  {
+    "c_name" : "partialIn",
+    "c_port_direction" : "in",
+    "rtl_ports" : {
+      "data_read_in" : "partialIn"
+    }
+  }
+  ],
+  "c_return" : {
+    "c_name": "ret", 
+    "c_port_direction" : "out",
+    "rtl_ports" : {
+      "data_write_out" : "partialOut"
+    }
+  },
+  "rtl_common_signal" : {
+    "module_clock"                    : "clk",
+    "module_reset"                    : "rst",
+    "module_clock_enable"             : "ce",
+    "ap_ctrl_chain_protocol_idle"     : "",
+    "ap_ctrl_chain_protocol_start"    : "",
+    "ap_ctrl_chain_protocol_ready"    : "",
+    "ap_ctrl_chain_protocol_done"     : "",
+    "ap_ctrl_chain_protocol_continue" : ""
+  },
+  "rtl_performance" : {
+    "latency" : "4",
+    "II"      : "1"
+  },
+  "rtl_resource_usage" : {
+    "FF"   :   "0",
+    "LUT"  :   "0",
+    "BRAM" :   "0",
+    "URAM" :   "0",
+    "DSP"  :   "1"
+  }
+}

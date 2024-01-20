@@ -1,4 +1,4 @@
-#include "blackbox/dotprod_x7/dotprod_x7.h"
+#include "blackbox/muladd2simd/muladd2simd.h"
 #include <ap_int.h>
 #include <iostream>
 #include <random>
@@ -11,7 +11,7 @@ constexpr int SEED = 12;
 void example(const din_t a[N], const din_t d[N], const din_t b[N],
              dout_t dout[N]) {
   for (auto i = 0; i < N; i++) {
-    dout[i] = dotprod_x7(a[i], d[i], b[i], 0);
+    dout[i] = muladd2simd(a[i], d[i], b[i], 0);
   }
   return;
 }

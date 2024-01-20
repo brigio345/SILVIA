@@ -7,7 +7,7 @@ open_project -reset ${PROJ_NAME}
 
 add_files test.cpp
 add_files -tb test.cpp
-add_files -blackbox blackbox/dotprod_x7/dotprod_x7.json
+add_files -blackbox blackbox/muladd2simd/muladd2simd.json
 
 set_top example
 

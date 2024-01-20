@@ -1,8 +1,8 @@
 ::common::set_param hls.enable_hidden_option_error false
 
-proc csynth_design_simd {bb_name solution_path llvm_install_path {simd_root ".."}} {
+proc csynth_design_simd {bb_name top_name solution_path llvm_install_path {simd_root ".."}} {
 	if { ![info exists ::env(HLS_LLVM_PLUGIN_DIR)] } {
-		set ::env(HLS_LLVM_PLUGIN_DIR) [file normalize ../../llvm-3.9/lib/InsertDummyBB]
+		set ::env(HLS_LLVM_PLUGIN_DIR) [file normalize ../../llvm-3.9/lib/CallBlackBox]
 	}
 
 	if { ![file exists $::env(HLS_LLVM_PLUGIN_DIR)/LLVMCustomPasses.so] } {
@@ -16,11 +16,13 @@ proc csynth_design_simd {bb_name solution_path llvm_install_path {simd_root ".."
 		$::env(XILINX_HLS)/lnx64/tools/clang-3.9-csynth/bin/llvm-nm
 	set ::SOLUTION_DIR $solution_path
 	set ::BB_NAME $bb_name
+	set ::TOP_NAME $top_name
 
 	set ::LLVM_CUSTOM_CMD {$::SIMD_ROOT/scripts/safe_link.sh \
 		$::LLVM_CUSTOM_NM $::LLVM_CUSTOM_LINK $LLVM_CUSTOM_OPT \
 		$LLVM_CUSTOM_INPUT $LLVM_CUSTOM_OUTPUT \
-		$::env(HLS_LLVM_PLUGIN_DIR) $::SOLUTION_DIR $::BB_NAME\
+		$::env(HLS_LLVM_PLUGIN_DIR) $::SOLUTION_DIR $::BB_NAME \
+		$::TOP_NAME
 	}
 
 	exec ln -sf ${simd_root}/blackbox .

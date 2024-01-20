@@ -10,25 +10,25 @@
 #include "llvm/Transforms/Utils/XILINXLoopUtils.h"
 #include <string>
 
-#define INSERT_DUMMY_DB_DEBUG_
+#define CALL_BLACK_BOX_DEBUG_
 using namespace llvm;
 
 namespace {
 static cl::opt<std::string>
-    BBFnName("insert-dummy-bb-fn", cl::ValueRequired,
-             cl::desc("The name of the blackbox function to call."));
-static cl::opt<std::string>
-    BBTopName("insert-dummy-bb-top", cl::ValueRequired,
-              cl::desc("The name function where to insert the blackbox call."));
+    BlackBoxFnName("call-black-box-fn", cl::ValueRequired,
+                   cl::desc("The name of the blackbox function to call."));
+static cl::opt<std::string> BlackBoxTopName(
+    "call-black-box-top", cl::ValueRequired,
+    cl::desc("The name function where to insert the blackbox call."));
 
 const std::string BEGIN_SEP(std::string("\n\n") + std::string(80, '>') +
                             std::string("\n\n"));
 const std::string END_SEP(std::string("\n\n") + std::string(80, '<') +
                           std::string("\n\n"));
 
-struct InsertDummyBB : public ModulePass {
+struct CallBlackBox : public ModulePass {
   static char ID;
-  InsertDummyBB() : ModulePass(ID) {}
+  CallBlackBox() : ModulePass(ID) {}
 
   bool runOnModule(Module &M) override;
   bool doInitialization(Module &M) override;
@@ -39,28 +39,28 @@ struct InsertDummyBB : public ModulePass {
   }
 
 private:
-  StringRef _getBBName(Module &M) const;
-  std::vector<Value *> _getBBFnArgs(Function *F) const;
-  bool _isBBCalled(Module &M, StringRef &BBName) const;
+  StringRef _getBlackBoxName(Module &M) const;
+  std::vector<Value *> _getBlackBoxFnArgs(Function *F) const;
+  bool _isBlackBoxCalled(Module &M, StringRef &BlackBoxName) const;
 };
 
-StringRef InsertDummyBB::_getBBName(Module &M) const {
-  StringRef BBName("");
+StringRef CallBlackBox::_getBlackBoxName(Module &M) const {
+  StringRef BlackBoxName("");
   for (Function &F : M) {
     if (F.empty())
       continue;
-    if (std::string(F.getName()).find(BBFnName) != std::string::npos) {
-      BBName = F.getName();
-#ifdef INSERT_DUMMY_DB_DEBUG_
-      dbgs() << BEGIN_SEP << "Found the BB declaration: " << F.getName()
+    if (std::string(F.getName()).find(BlackBoxFnName) != std::string::npos) {
+      BlackBoxName = F.getName();
+#ifdef CALL_BLACK_BOX_DEBUG_
+      dbgs() << BEGIN_SEP << "Found the BlackBox declaration: " << F.getName()
              << END_SEP;
-#endif // INSERT_DUMMY_DB_DEBUG_
+#endif // CALL_BLACK_BOX_DEBUG_
     }
   }
-  return BBName;
+  return BlackBoxName;
 }
 
-bool InsertDummyBB::_isBBCalled(Module &M, StringRef &BBName) const {
+bool CallBlackBox::_isBlackBoxCalled(Module &M, StringRef &BlackBoxName) const {
   for (auto &F : M) {      // iterate over all functions in the module
     for (auto &BB : F) {   // iterate over all basic blocks in the function
       for (auto &I : BB) { // iterate over all instructions in the basic block
@@ -69,8 +69,8 @@ bool InsertDummyBB::_isBBCalled(Module &M, StringRef &BBName) const {
           if (auto *calledFunction =
                   callInst->getCalledFunction()) { // get the called function
             if (calledFunction->getName() ==
-                BBName) { // check if the called function is the one we
-                          // are looking for
+                BlackBoxName) { // check if the called function is the one we
+                                // are looking for
               return true;
             }
           }
@@ -81,36 +81,38 @@ bool InsertDummyBB::_isBBCalled(Module &M, StringRef &BBName) const {
   return false;
 }
 
-bool InsertDummyBB::doInitialization(Module &M) { return false; }
+bool CallBlackBox::doInitialization(Module &M) { return false; }
 
-bool InsertDummyBB::doFinalization(Module &M) { return false; }
+bool CallBlackBox::doFinalization(Module &M) { return false; }
 
-bool InsertDummyBB::runOnModule(Module &M) {
+bool CallBlackBox::runOnModule(Module &M) {
   // Iterating over the functions available in the module.
   bool finished = false;
 
-  auto BBName = _getBBName(M);
-  if (BBName == "") {
-    dbgs() << "ERROR: Could not find the BB function in the module. The fake"
-              "call will not be inserted.\n";
+  auto BlackBoxName = _getBlackBoxName(M);
+  if (BlackBoxName == "") {
+    dbgs()
+        << "ERROR: Could not find the BlackBox function in the module. The fake"
+           "call will not be inserted.\n";
     return false;
   }
 
-  if (_isBBCalled(M, BBName)) {
-#ifdef INSERT_DUMMY_DB_DEBUG_
-    dbgs() << BEGIN_SEP << "There is already a call to the BB." << END_SEP;
-#endif // INSERT_DUMMY_DB_DEBUG_
+  if (_isBlackBoxCalled(M, BlackBoxName)) {
+#ifdef CALL_BLACK_BOX_DEBUG_
+    dbgs() << BEGIN_SEP << "There is already a call to the BlackBox."
+           << END_SEP;
+#endif // CALL_BLACK_BOX_DEBUG_
     return false;
   }
 
-  auto BBFn = M.getFunction(BBName);
-  if (!BBFn) {
-    dbgs() << "ERROR: Could not find function" << BBName << ".\n";
+  auto BlackBoxFn = M.getFunction(BlackBoxName);
+  if (!BlackBoxFn) {
+    dbgs() << "ERROR: Could not find function" << BlackBoxName << ".\n";
     return false;
   }
 
   for (Function &F : M) {
-    if (F.getName() != BBTopName || F.empty() || F.isDeclaration())
+    if (F.getName() != BlackBoxTopName || F.empty() || F.isDeclaration())
       continue;
 
     LLVMContext &context = F.getContext();
@@ -129,12 +131,12 @@ bool InsertDummyBB::runOnModule(Module &M) {
     builder.SetInsertPoint(newBB);
     SmallVector<Value *, 8> args;
     args.push_back(builder.CreateAlloca(
-        BBFn->getArg(0)->getType()->getPointerElementType()));
-    for (int i = 1; i < BBFn->arg_size(); i++)
-      args.push_back(Constant::getNullValue(BBFn->getArg(i)->getType()));
+        BlackBoxFn->getArg(0)->getType()->getPointerElementType()));
+    for (int i = 1; i < BlackBoxFn->arg_size(); i++)
+      args.push_back(Constant::getNullValue(BlackBoxFn->getArg(i)->getType()));
 
     // FIXME: do not set a random debug location just to generate valid IR.
-    auto call = builder.CreateCall(BBFn, args);
+    auto call = builder.CreateCall(BlackBoxFn, args);
     DebugLoc DL;
     for (auto &BB : F) {
       for (auto &I : BB) {
@@ -158,15 +160,15 @@ bool InsertDummyBB::runOnModule(Module &M) {
 
     break;
   }
-#ifdef INSERT_DUMMY_DB_DEBUG_
+#ifdef CALL_BLACK_BOX_DEBUG_
   dbgs() << std::string(80, '-') << "\n\nExiting the pass...\n\n"
          << std::string(80, '-') << "\n";
-#endif // INSERT_DUMMY_DB_DEBUG_
+#endif // CALL_BLACK_BOX_DEBUG_
   return finished;
 }
 } // namespace
 
-char InsertDummyBB::ID = 0;
-static RegisterPass<InsertDummyBB>
-    X("insert_dummy_bb", "Inserts a dummy blackbox call to make Vitis happy",
+char CallBlackBox::ID = 0;
+static RegisterPass<CallBlackBox>
+    X("call-black-box", "Inserts a dummy blackbox call to make Vitis happy",
       false /* Only looks at CFG */, false /* Transformation Pass */);

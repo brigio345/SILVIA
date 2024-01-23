@@ -85,6 +85,23 @@ bool CallBlackBox::doInitialization(Module &M) { return false; }
 
 bool CallBlackBox::doFinalization(Module &M) { return false; }
 
+// Recursively build a constant struct, assuming that the innermost elements
+// are integers.
+Constant *getConstant(Type *argType, int value) {
+  auto argIntType = dyn_cast<IntegerType>(argType);
+  if (argIntType)
+    return ConstantInt::get(argIntType, value);
+
+  auto argStructType = dyn_cast<StructType>(argType);
+  if (!argStructType)
+    return nullptr;
+
+  SmallVector<Constant *, 1> constants;
+  for (auto i = 0; i < argStructType->getNumElements(); ++i)
+    constants.push_back(getConstant(argStructType->getElementType(i), value));
+  return ConstantStruct::get(argStructType, constants);
+}
+
 bool CallBlackBox::runOnModule(Module &M) {
   // Iterating over the functions available in the module.
   bool finished = false;
@@ -132,8 +149,18 @@ bool CallBlackBox::runOnModule(Module &M) {
     SmallVector<Value *, 8> args;
     args.push_back(builder.CreateAlloca(
         BlackBoxFn->getArg(0)->getType()->getPointerElementType()));
-    for (int i = 1; i < BlackBoxFn->arg_size(); i++)
-      args.push_back(Constant::getNullValue(BlackBoxFn->getArg(i)->getType()));
+    for (int i = 1; i < BlackBoxFn->arg_size(); i++) {
+      auto argPointerType =
+          dyn_cast<PointerType>(BlackBoxFn->getArg(i)->getType());
+      auto argStructType =
+          dyn_cast<StructType>(argPointerType->getElementType());
+      auto argConstant = getConstant(argStructType, i);
+
+      auto argGlobalVar = new GlobalVariable(
+          M, argStructType, true, GlobalValue::LinkageTypes::PrivateLinkage,
+          argConstant);
+      args.push_back(argGlobalVar);
+    }
 
     // FIXME: do not set a random debug location just to generate valid IR.
     auto call = builder.CreateCall(BlackBoxFn, args);

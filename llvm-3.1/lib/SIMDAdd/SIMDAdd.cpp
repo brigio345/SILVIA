@@ -209,31 +209,48 @@ void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
   IRBuilder<> builder(insertBefore);
 
   Value *args[2] = {nullptr};
+  std::string argName[2] = {""};
+  std::string retName = "";
   for (unsigned i = 0; i < instTuple.size(); ++i) {
+    retName = instTuple[i].outInsts[0]->getName().str() +
+              std::string((i > 0) ? "_" : "") + retName;
     for (unsigned j = 0; j < instTuple[i].inInsts[0]->getNumOperands(); ++j) {
-      Value *arg = builder.CreateZExt(instTuple[i].inInsts[0]->getOperand(j),
-                                      IntegerType::get(context, 48));
+      auto operand = instTuple[i].inInsts[0]->getOperand(j);
+      auto arg = builder.CreateZExt(operand, IntegerType::get(context, 48),
+                                    operand->getName() + "_zext");
       int shift_amount = (12 * i);
       if (shift_amount > 0) {
-        arg = builder.CreateShl(
-            builder.CreateZExt(arg, IntegerType::get(context, 48)),
-            shift_amount);
+        arg = builder.CreateShl(arg, shift_amount, operand->getName() + "_shl");
       }
-      args[j] = args[j] ? builder.CreateOr(args[j], arg) : arg;
+
+      argName[j] = operand->getName().str() + std::string((i > 0) ? "_" : "") +
+                   argName[j];
+      if (args[j])
+        arg = builder.CreateOr(args[j], arg, argName[j]);
+
+      args[j] = arg;
     }
   }
 
-  Value *sum_concat = builder.CreateCall(SIMDFunc, args);
+  Value *sum_concat = builder.CreateCall(SIMDFunc, args, retName);
 
   Value *result[4];
-  for (unsigned i = 0; i < instTuple.size(); ++i) {
+  for (int i = 0; i < instTuple.size(); ++i) {
     int shift_amount = (12 * i);
-    Value *result_shifted = (shift_amount > 0)
-                                ? builder.CreateLShr(sum_concat, shift_amount)
-                                : sum_concat;
 
-    result[i] = builder.CreateTrunc(result_shifted,
-                                    instTuple[i].outInsts[0]->getType());
+    std::string instName = "";
+    for (int j = (instTuple.size() - 1); j >= i; --j)
+      instName += instTuple[j].outInsts[0]->getName().str() + "_";
+    instName += "sext";
+
+    Value *result_shifted =
+        (shift_amount > 0)
+            ? builder.CreateLShr(sum_concat, shift_amount, instName)
+            : sum_concat;
+
+    result[i] =
+        builder.CreateTrunc(result_shifted, instTuple[i].outInsts[0]->getType(),
+                            instTuple[i].outInsts[0]->getName());
   }
 
   // Replace the add instruction with the result

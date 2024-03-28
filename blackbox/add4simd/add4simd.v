@@ -24,6 +24,7 @@ endmodule // __add4simd
 module add4simd (input clk, rst, ce, 
                  input [47:0] a, 
                  input [47:0] b,
+		 // TO UNCOMMENT: output ap_ready,
                  output [47:0] ap_return);
 
 __add4simd add4simd_instance (
@@ -39,5 +40,7 @@ __add4simd add4simd_instance (
   .b2(b[23:12]),
   .b3(b[11:0]),
   .ap_return(ap_return));
+
+  // TO UNCOMMENT: assign ap_ready = 1;
 endmodule // add4simd
   

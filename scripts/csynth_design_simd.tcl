@@ -38,4 +38,6 @@ proc csynth_design_simd {bb_name top_name solution_path llvm_install_path {simd_
 	exec zip -rj dut.hcp dut
 	read_checkpoint dut.hcp
 	csynth_design -hw_syn
+
+	exec sh -c "sed -i 's|// TO UNCOMMENT: ||g' ${solution_path}/syn/verilog/${bb_name}.v"
 }

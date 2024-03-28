@@ -47,6 +47,23 @@ static cl::opt<std::string>
            cl::desc("The operation to map to SIMD DSPs. "
                     "Possible values are: add4simd."));
 
+bool dependsOn(Instruction *inst0, Instruction *inst1) {
+  if (inst0->getParent() != inst1->getParent())
+    return false;
+
+  if (inst0 == inst1)
+    return true;
+
+  for (int i = 0; i < inst0->getNumOperands(); ++i) {
+    if (auto operandInst = dyn_cast<Instruction>(inst0->getOperand(i))) {
+      if (dependsOn(operandInst, inst1))
+        return true;
+    }
+  }
+
+  return false;
+}
+
 void getInstMap(BasicBlock *BB, DenseMap<Instruction *, int> &instMap) {
   for (auto &inst : *BB)
     instMap[&inst] = instMap.size();
@@ -318,6 +335,19 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       // compatible with current tuple.
       if (firstUseCurr && lastDefCurr &&
           (instMap[firstUseCurr] < instMap[lastDefCurr])) {
+        CI++;
+        continue;
+      }
+
+      auto compatible = true;
+      auto opInst = dyn_cast<Instruction>(candidateInstCurr.inInsts[0]);
+      for (auto selected : instTuple) {
+        if (dependsOn(opInst, selected.outInsts[0])) {
+          compatible = false;
+          break;
+        }
+      }
+      if (!compatible) {
         CI++;
         continue;
       }

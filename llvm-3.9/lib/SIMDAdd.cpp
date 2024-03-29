@@ -1,13 +1,14 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/BasicBlock.h"
-#include "llvm/Function.h"
-#include "llvm/Instructions.h"
-#include "llvm/Module.h"
+#include "llvm/Analysis/MemoryLocation.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/IRBuilder.h"
 
 #include <cassert>
 #include <list>
@@ -20,8 +21,8 @@ struct SIMDAdd : public BasicBlockPass {
 
   bool runOnBasicBlock(BasicBlock &BB) override;
 
-  virtual void getAnalysisUsage(AnalysisUsage &AU) const {
-    AU.addRequired<AliasAnalysis>();
+  virtual void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.addRequired<AAResultsWrapperPass>();
   }
 
   void anticipateDefs(Instruction *inst, bool anticipateInst);
@@ -115,9 +116,8 @@ bool SIMDAdd::isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
   if ((!loadToMove) && (!storeToMove))
     return true;
 
-  AliasAnalysis::Location locToMove =
-      (storeToMove ? AA->getLocation(storeToMove)
-                   : AA->getLocation(loadToMove));
+  MemoryLocation locToMove = (storeToMove ? MemoryLocation::get(storeToMove)
+                                          : MemoryLocation::get(loadToMove));
 
   bool toCheck = false;
   for (auto &I : *(instToMove->getParent())) {
@@ -131,9 +131,9 @@ bool SIMDAdd::isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
       break;
 
     if (auto store = dyn_cast<StoreInst>(&I)) {
-      auto loc = AA->getLocation(store);
+      auto loc = MemoryLocation::get(store);
 
-      if (AA->alias(locToMove, loc) != AliasAnalysis::AliasResult::NoAlias)
+      if (AA->alias(locToMove, loc) != AliasResult::NoAlias)
         return false;
     }
 
@@ -143,9 +143,9 @@ bool SIMDAdd::isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
       continue;
 
     if (auto load = dyn_cast<LoadInst>(&I)) {
-      auto loc = AA->getLocation(load);
+      auto loc = MemoryLocation::get(load);
 
-      if (AA->alias(locToMove, loc) != AliasAnalysis::AliasResult::NoAlias)
+      if (AA->alias(locToMove, loc) != AliasResult::NoAlias)
         return false;
     }
   }
@@ -223,6 +223,8 @@ void getSIMDableInstructions(BasicBlock &BB,
 void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
                               Instruction *insertBefore, Function *SIMDFunc,
                               LLVMContext &context) {
+  // TODO: Select the pipelined or non-pipelined version of SIMDFunc based on
+  // `isPipeline` of current loop and function.
   IRBuilder<> builder(insertBefore);
 
   Value *args[2] = {nullptr};
@@ -291,7 +293,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
 
   LLVMContext &context = F->getContext();
 
-  AA = &getAnalysis<AliasAnalysis>();
+  AA = &getAnalysis<AAResultsWrapperPass>().getAAResults();
 
   bool modified = false;
 

@@ -33,9 +33,9 @@ struct SIMDAdd : public BasicBlockPass {
   AliasAnalysis *AA;
 };
 
-struct Candidate {
-  SmallVector<Value *, 2> inVals;
-  SmallVector<Value *, 1> outVals;
+struct CandidateInst {
+  SmallVector<Instruction *, 2> inInsts;
+  SmallVector<Instruction *, 1> outInsts;
 };
 
 char SIMDAdd::ID = 0;
@@ -203,16 +203,16 @@ void SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
 }
 
 // Collect all the add instructions.
-void getSIMDableInstructions(BasicBlock &BB, std::list<Candidate> &candidates) {
+void getSIMDableInstructions(BasicBlock &BB,
+                             std::list<CandidateInst> &candidateInsts) {
   for (auto &I : BB) {
     if (I.getOpcode() != Instruction::Add)
       continue;
     if (cast<IntegerType>(I.getType())->getBitWidth() <= 12) {
-      Candidate candidate;
-      for (auto &inVal : I.operands())
-        candidate.inVals.push_back(inVal);
-      candidate.outVals.push_back(&I);
-      candidates.push_back(candidate);
+      CandidateInst candidate;
+      candidate.inInsts.push_back(&I);
+      candidate.outInsts.push_back(&I);
+      candidateInsts.push_back(candidate);
     }
     // TODO: collect candidates for simd2
     // else if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 24)
@@ -220,7 +220,7 @@ void getSIMDableInstructions(BasicBlock &BB, std::list<Candidate> &candidates) {
   }
 }
 
-void replaceInstsWithSIMDCall(SmallVector<Candidate, 4> instTuple,
+void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
                               Instruction *insertBefore, Function *SIMDFunc,
                               LLVMContext &context) {
   // TODO: Select the pipelined or non-pipelined version of SIMDFunc based on
@@ -231,10 +231,10 @@ void replaceInstsWithSIMDCall(SmallVector<Candidate, 4> instTuple,
   std::string argName[2] = {""};
   std::string retName = "";
   for (unsigned i = 0; i < instTuple.size(); ++i) {
-    retName = instTuple[i].outVals[0]->getName().str() +
+    retName = instTuple[i].outInsts[0]->getName().str() +
               std::string((i > 0) ? "_" : "") + retName;
-    for (unsigned j = 0; j < instTuple[i].inVals.size(); ++j) {
-      auto operand = instTuple[i].inVals[j];
+    for (unsigned j = 0; j < instTuple[i].inInsts[0]->getNumOperands(); ++j) {
+      auto operand = instTuple[i].inInsts[0]->getOperand(j);
       auto arg = builder.CreateZExt(operand, IntegerType::get(context, 48),
                                     operand->getName() + "_zext");
       int shift_amount = (12 * i);
@@ -259,7 +259,7 @@ void replaceInstsWithSIMDCall(SmallVector<Candidate, 4> instTuple,
 
     std::string instName = "";
     for (int j = (instTuple.size() - 1); j >= i; --j)
-      instName += instTuple[j].outVals[0]->getName().str() + "_";
+      instName += instTuple[j].outInsts[0]->getName().str() + "_";
     instName += "sext";
 
     Value *result_shifted =
@@ -268,15 +268,14 @@ void replaceInstsWithSIMDCall(SmallVector<Candidate, 4> instTuple,
             : sum_concat;
 
     result[i] =
-        builder.CreateTrunc(result_shifted, instTuple[i].outVals[0]->getType(),
-                            instTuple[i].outVals[0]->getName());
+        builder.CreateTrunc(result_shifted, instTuple[i].outInsts[0]->getType(),
+                            instTuple[i].outInsts[0]->getName());
   }
 
   // Replace the add instruction with the result
   for (unsigned i = 0; i < instTuple.size(); ++i) {
-    auto outInst = cast<Instruction>(instTuple[i].outVals[0]);
-    outInst->replaceAllUsesWith(result[i]);
-    outInst->eraseFromParent();
+    instTuple[i].outInsts[0]->replaceAllUsesWith(result[i]);
+    instTuple[i].outInsts[0]->eraseFromParent();
   }
 }
 
@@ -298,39 +297,33 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
 
   bool modified = false;
 
-  std::list<Candidate> candidates;
-  getSIMDableInstructions(BB, candidates);
+  std::list<CandidateInst> candidateInsts;
+  getSIMDableInstructions(BB, candidateInsts);
 
-  candidates.reverse();
-  for (auto &candidateCurr : candidates) {
-    for (auto inVal : candidateCurr.inVals) {
-      if (auto inInst = dyn_cast<Instruction>(inVal))
-        anticipateDefs(inInst);
-    }
-  }
-  candidates.reverse();
-  for (auto &candidateCurr : candidates)
-    posticipateUses(cast<Instruction>(candidateCurr.outVals[0]));
+  candidateInsts.reverse();
+  for (auto &candidateInstCurr : candidateInsts)
+    anticipateDefs(candidateInstCurr.inInsts[0]);
+  candidateInsts.reverse();
+  for (auto &candidateInstCurr : candidateInsts)
+    posticipateUses(candidateInstCurr.outInsts[0]);
 
   // Build tuples of 4 instructions that can be mapped to the
   // same SIMD DSP.
   // TODO: check if a size of 8 is a good choice
-  while (!candidates.empty()) {
-    SmallVector<Candidate, 4> instTuple;
+  while (!candidateInsts.empty()) {
+    SmallVector<CandidateInst, 4> instTuple;
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
     DenseMap<Instruction *, int> instMap;
     getInstMap(&BB, instMap);
-    for (auto CI = candidates.begin(), CE = candidates.end(); CI != CE;) {
-      Candidate candidateCurr = *CI;
-      Instruction *lastDefCurr = nullptr;
-      for (auto inVal : candidateCurr.inVals) {
-        if (auto inInst = dyn_cast<Instruction>(inVal))
-          lastDefCurr = getLastOperandDef(inInst);
-      }
+    for (auto CI = candidateInsts.begin(), CE = candidateInsts.end();
+         CI != CE;) {
+      CandidateInst candidateInstCurr = *CI;
+      Instruction *lastDefCurr =
+          getLastOperandDef(candidateInstCurr.inInsts[0]);
       Instruction *firstUseCurr =
-          getFirstValueUse(cast<Instruction>(candidateCurr.outVals[0]));
+          getFirstValueUse(candidateInstCurr.outInsts[0]);
 
       if ((!lastDefCurr) ||
           (lastDef && (instMap[lastDefCurr] < instMap[lastDef])))
@@ -349,9 +342,9 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       }
 
       auto compatible = true;
-      auto opInst = dyn_cast<Instruction>(candidateCurr.outVals[0]);
+      auto opInst = dyn_cast<Instruction>(candidateInstCurr.inInsts[0]);
       for (auto selected : instTuple) {
-        if (dependsOn(opInst, cast<Instruction>(selected.outVals[0]))) {
+        if (dependsOn(opInst, selected.outInsts[0])) {
           compatible = false;
           break;
         }
@@ -361,14 +354,14 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
         continue;
       }
 
-      instTuple.push_back(candidateCurr);
+      instTuple.push_back(candidateInstCurr);
 
       // Update with tuple worst case
       firstUse = firstUseCurr;
       lastDef = lastDefCurr;
 
       // The current candidate was selected: it is not a candidate anymore.
-      candidates.erase(CI++);
+      candidateInsts.erase(CI++);
 
       if (instTuple.size() == 4)
         break;

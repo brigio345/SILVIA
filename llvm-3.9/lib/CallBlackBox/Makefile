@@ -33,7 +33,7 @@ all-debug-off: CXXFLAGS := $(CXXFLAGS) -DNDEBUG
 
 all-debug-off: LLVMCustomPasses.so
 
-LLVMCustomPasses.so: CallBlackBox.o SIMDAdd.o
+LLVMCustomPasses.so: CallBlackBox.o
 	$(CXX) -shared $^ -o $@ -fPIC $(CXXFLAGS) $(LDFLAGS)
 
 %.o: %.cpp

@@ -154,6 +154,9 @@ bool SIMDAdd::isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
 }
 
 void SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
+  if (inst->getOpcode() == Instruction::PHI)
+    return;
+
   BasicBlock *instBB = inst->getParent();
   for (unsigned i = 0; i < inst->getNumOperands(); ++i) {
     Value *op = inst->getOperand(i);
@@ -179,6 +182,9 @@ void SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
 }
 
 void SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
+  if (inst->getOpcode() == Instruction::PHI)
+    return;
+
   BasicBlock *instBB = inst->getParent();
   for (auto UI = inst->use_begin(), UE = inst->use_end(); UI != UE; ++UI) {
     Value *user = *UI;

@@ -129,7 +129,8 @@ bool CallBlackBox::runOnModule(Module &M) {
   }
 
   for (Function &F : M) {
-    if (F.getName() != BlackBoxTopName || F.empty() || F.isDeclaration())
+    if ((std::string(F.getName()).find(BlackBoxTopName) == std::string::npos) ||
+        F.empty() || F.isDeclaration())
       continue;
 
     LLVMContext &context = F.getContext();

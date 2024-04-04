@@ -25,7 +25,7 @@ proc csynth_design_simd {bb_name top_name solution_path llvm_install_path {simd_
 		$::TOP_NAME
 	}
 
-	exec ln -sf ${simd_root}/blackbox .
+	exec cp -r ${simd_root}/blackbox .
 	add_files -blackbox blackbox/$bb_name/$bb_name.json
 	csynth_design
 	exec unzip -o -d dut ${solution_path}/.autopilot/db/dut.hcp
@@ -39,5 +39,5 @@ proc csynth_design_simd {bb_name top_name solution_path llvm_install_path {simd_
 	read_checkpoint dut.hcp
 	csynth_design -hw_syn
 
-	exec sh -c "sed -i 's|// TO UNCOMMENT: ||g' ${solution_path}/syn/verilog/${bb_name}.v"
+	exec sh -c "find ${solution_path} blackbox -type f -name ${bb_name}.v -exec sed -i 's|// TO UNCOMMENT: ||g' {} +"
 }

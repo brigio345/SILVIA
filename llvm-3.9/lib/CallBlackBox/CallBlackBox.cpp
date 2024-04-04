@@ -7,7 +7,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Transforms/Utils/XILINXLoopUtils.h"
+#include "llvm/Transforms/Utils/XILINXFunctionUtils.h"
 #include <string>
 
 #define CALL_BLACK_BOX_DEBUG_
@@ -135,18 +135,13 @@ bool CallBlackBox::runOnModule(Module &M) {
 
     LLVMContext &context = F.getContext();
 
-    BasicBlock *originalEntry = &F.getEntryBlock();
-
-    BasicBlock *newBB =
-        BasicBlock::Create(context, "dummy", &F, &F.getEntryBlock());
-
-    // FIXME: loop should be freed (?)
-    Loop *loop = new Loop();
-    LoopInfo *LI = &getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
-    loop->addBasicBlockToLoop(newBB, *LI);
-
+    auto blackBoxWrapper = Function::Create(
+        FunctionType::get(Type::getVoidTy(context), {}, false),
+        Function::ExternalLinkage, BlackBoxName + "_wrapper", &M);
+    auto bb = BasicBlock::Create(context, "entry", blackBoxWrapper);
     IRBuilder<> builder(context);
-    builder.SetInsertPoint(newBB);
+    builder.SetInsertPoint(bb);
+
     SmallVector<Value *, 8> args;
     args.push_back(builder.CreateAlloca(
         BlackBoxFn->getArg(0)->getType()->getPointerElementType()));
@@ -178,12 +173,14 @@ bool CallBlackBox::runOnModule(Module &M) {
         break;
     }
     call->setDebugLoc(DL);
+    builder.CreateRetVoid();
 
-    builder.CreateBr(originalEntry);
+    addPipeline(blackBoxWrapper);
+    auto entryBB = &F.getEntryBlock();
+    builder.SetInsertPoint(entryBB);
+    auto c = builder.CreateCall(blackBoxWrapper);
+    c->moveBefore(entryBB->getFirstNonPHI());
 
-    LI->addTopLevelLoop(loop);
-
-    addPipeline(loop);
     finished = true;
 
     break;

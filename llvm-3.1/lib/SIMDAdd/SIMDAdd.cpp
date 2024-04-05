@@ -217,6 +217,8 @@ void getSIMDableInstructions(BasicBlock &BB,
   for (auto &I : BB) {
     if (I.getOpcode() != Instruction::Add)
       continue;
+    if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1)))
+      continue;
     if (cast<IntegerType>(I.getType())->getBitWidth() <= 12) {
       CandidateInst candidate;
       candidate.inInsts.push_back(&I);

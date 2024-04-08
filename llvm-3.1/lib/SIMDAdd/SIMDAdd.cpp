@@ -175,7 +175,7 @@ void SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
 
   Instruction *insertionPoint = instBB->getFirstNonPHI();
   auto lastDef = getLastOperandDef(inst);
-  if (lastDef)
+  if (lastDef && (lastDef->getOpcode() != Instruction::PHI))
     insertionPoint = lastDef->getNextNode();
 
   if (!isMoveMemSafe(inst, insertionPoint, inst))

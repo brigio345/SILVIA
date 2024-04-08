@@ -236,55 +236,44 @@ void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
                               LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
-  Value *args[2] = {nullptr};
-  std::string argName[2] = {""};
+  SmallVector<Value *, 8> args(
+      8, ConstantInt::get(IntegerType::get(context, 12), 0));
   std::string retName = "";
   for (unsigned i = 0; i < instTuple.size(); ++i) {
-    retName = instTuple[i].outInsts[0]->getName().str() +
-              std::string((i > 0) ? "_" : "") + retName;
+    retName = retName + ((retName == "") ? "" : "_") +
+              instTuple[i].outInsts[0]->getName().str();
     for (unsigned j = 0; j < instTuple[i].inInsts[0]->getNumOperands(); ++j) {
       auto operand = instTuple[i].inInsts[0]->getOperand(j);
-      auto arg = builder.CreateZExt(operand, IntegerType::get(context, 48),
-                                    operand->getName() + "_zext");
-      int shift_amount = (12 * i);
-      if (shift_amount > 0) {
-        arg = builder.CreateShl(arg, shift_amount, operand->getName() + "_shl");
-      }
 
-      argName[j] = operand->getName().str() + std::string((i > 0) ? "_" : "") +
-                   argName[j];
-      if (args[j])
-        arg = builder.CreateOr(args[j], arg, argName[j]);
-
-      args[j] = arg;
+      auto arg =
+          (cast<IntegerType>(operand->getType())->getBitWidth() < 12)
+              ? builder.CreateZExt(operand, IntegerType::get(context, 12),
+                                   operand->getName() + "_zext")
+              : operand;
+      args[i * instTuple[i].inInsts[0]->getNumOperands() + j] = arg;
     }
   }
 
-  Value *sum_concat = builder.CreateCall(SIMDFunc, args, retName);
+  Value *sumAggr = builder.CreateCall(SIMDFunc, args, retName);
 
   Value *result[4];
   for (int i = 0; i < instTuple.size(); ++i) {
-    int shift_amount = (12 * i);
-
-    std::string instName = "";
-    for (int j = (instTuple.size() - 1); j >= i; --j)
-      instName += instTuple[j].outInsts[0]->getName().str() + "_";
-    instName += "sext";
-
-    Value *result_shifted =
-        (shift_amount > 0)
-            ? builder.CreateLShr(sum_concat, shift_amount, instName)
-            : sum_concat;
-
-    result[i] =
-        builder.CreateTrunc(result_shifted, instTuple[i].outInsts[0]->getType(),
-                            instTuple[i].outInsts[0]->getName());
+    result[i] = builder.CreateExtractValue(
+        sumAggr, i, instTuple[i].outInsts[0]->getName() + "_zext");
+    if (cast<IntegerType>(instTuple[i].outInsts[0]->getType())->getBitWidth() <
+        12)
+      result[i] =
+          builder.CreateTrunc(result[i], instTuple[i].outInsts[0]->getType());
   }
 
   // Replace the add instruction with the result
   for (unsigned i = 0; i < instTuple.size(); ++i) {
+    auto resName = instTuple[i].outInsts[0]->getName();
+
     instTuple[i].outInsts[0]->replaceAllUsesWith(result[i]);
     instTuple[i].outInsts[0]->eraseFromParent();
+
+    result[i]->setName(resName);
   }
 }
 

@@ -26,8 +26,8 @@ struct SIMDAdd : public BasicBlockPass {
     AU.addRequired<LoopInfo>();
   }
 
-  void anticipateDefs(Instruction *inst, bool anticipateInst);
-  void posticipateUses(Instruction *inst, bool posticipateInst);
+  bool anticipateDefs(Instruction *inst, bool anticipateInst);
+  bool posticipateUses(Instruction *inst, bool posticipateInst);
   bool isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
                      Instruction *lastInst);
 
@@ -159,12 +159,13 @@ bool SIMDAdd::isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
   return true;
 }
 
-void SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
+bool SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
   // TODO: Anticipate calls if not crossing other calls or loads/stores.
   auto opcode = inst->getOpcode();
   if ((opcode == Instruction::PHI) || (opcode == Instruction::Call))
-    return;
+    return false;
 
+  auto modified = false;
   BasicBlock *instBB = inst->getParent();
   for (unsigned i = 0; i < inst->getNumOperands(); ++i) {
     Value *op = inst->getOperand(i);
@@ -172,11 +173,11 @@ void SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
     if (!opInst)
       continue;
     if (opInst->getParent() == instBB)
-      anticipateDefs(opInst, true);
+      modified = anticipateDefs(opInst, true);
   }
 
   if (!anticipateInst)
-    return;
+    return modified;
 
   Instruction *insertionPoint = instBB->getFirstNonPHI();
   auto lastDef = getLastOperandDef(inst);
@@ -184,17 +185,20 @@ void SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
     insertionPoint = lastDef->getNextNode();
 
   if (!isMoveMemSafe(inst, insertionPoint, inst))
-    return;
+    return modified;
 
   inst->moveBefore(insertionPoint);
+
+  return true;
 }
 
-void SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
+bool SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
   // TODO: Posticipate calls if not crossing other calls or loads/stores.
   auto opcode = inst->getOpcode();
   if ((opcode == Instruction::PHI) || (opcode == Instruction::Call))
-    return;
+    return false;
 
+  auto modified = false;
   BasicBlock *instBB = inst->getParent();
   for (auto UI = inst->use_begin(), UE = inst->use_end(); UI != UE; ++UI) {
     Value *user = *UI;
@@ -202,20 +206,22 @@ void SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
     if (!userInst)
       continue;
     if (userInst->getParent() == instBB)
-      posticipateUses(userInst, true);
+      modified = posticipateUses(userInst, true);
   }
 
   if (!posticipateInst)
-    return;
+    return modified;
 
   Instruction *insertionPoint = getFirstValueUse(inst);
   if (!insertionPoint)
     insertionPoint = instBB->getTerminator();
 
   if (!isMoveMemSafe(inst, inst, insertionPoint))
-    return;
+    return modified;
 
   inst->moveBefore(insertionPoint);
+
+  return true;
 }
 
 // Collect all the add instructions.
@@ -342,10 +348,10 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
 
   candidateInsts.reverse();
   for (auto &candidateInstCurr : candidateInsts)
-    anticipateDefs(candidateInstCurr.inInsts[0]);
+    modified |= anticipateDefs(candidateInstCurr.inInsts[0]);
   candidateInsts.reverse();
   for (auto &candidateInstCurr : candidateInsts)
-    posticipateUses(candidateInstCurr.outInsts[0]);
+    modified |= posticipateUses(candidateInstCurr.outInsts[0]);
 
   // Build tuples of 4 instructions that can be mapped to the
   // same SIMD DSP.

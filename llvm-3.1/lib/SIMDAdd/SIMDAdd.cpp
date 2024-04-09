@@ -133,6 +133,9 @@ bool SIMDAdd::isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
     if (&I == lastInst)
       break;
 
+    if (dyn_cast<CallInst>(&I))
+      return false;
+
     if (auto store = dyn_cast<StoreInst>(&I)) {
       auto loc = AA->getLocation(store);
 
@@ -157,7 +160,9 @@ bool SIMDAdd::isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
 }
 
 void SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
-  if (inst->getOpcode() == Instruction::PHI)
+  // TODO: Anticipate calls if not crossing other calls or loads/stores.
+  auto opcode = inst->getOpcode();
+  if ((opcode == Instruction::PHI) || (opcode == Instruction::Call))
     return;
 
   BasicBlock *instBB = inst->getParent();
@@ -185,7 +190,9 @@ void SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
 }
 
 void SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
-  if (inst->getOpcode() == Instruction::PHI)
+  // TODO: Posticipate calls if not crossing other calls or loads/stores.
+  auto opcode = inst->getOpcode();
+  if ((opcode == Instruction::PHI) || (opcode == Instruction::Call))
     return;
 
   BasicBlock *instBB = inst->getParent();

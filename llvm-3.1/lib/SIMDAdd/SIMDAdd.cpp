@@ -1,7 +1,6 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/BasicBlock.h"
 #include "llvm/Function.h"
 #include "llvm/Instructions.h"
@@ -23,7 +22,6 @@ struct SIMDAdd : public BasicBlockPass {
 
   virtual void getAnalysisUsage(AnalysisUsage &AU) const {
     AU.addRequired<AliasAnalysis>();
-    AU.addRequired<LoopInfo>();
   }
 
   bool anticipateDefs(Instruction *inst, bool anticipateInst);
@@ -32,7 +30,6 @@ struct SIMDAdd : public BasicBlockPass {
                      Instruction *lastInst);
 
   AliasAnalysis *AA;
-  LoopInfo *LI;
 };
 
 struct CandidateInst {
@@ -290,42 +287,7 @@ void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
   }
 }
 
-bool isLoopPipeline(Loop *L) {
-  auto terminator = L->getLoopLatch()->getTerminator();
-  if (auto loopMD = terminator->getMetadata("llvm.loop")) {
-    for (int i = 0; i < loopMD->getNumOperands(); ++i) {
-      auto pipelineEnableMD = dyn_cast<MDNode>(loopMD->getOperand(i));
-      if (!pipelineEnableMD)
-        continue;
-      auto pipelineEnableName =
-          dyn_cast<MDString>(pipelineEnableMD->getOperand(0));
-      if (!pipelineEnableName)
-        continue;
-      if (pipelineEnableName->getString() != "llvm.loop.pipeline.enable")
-        continue;
-
-      assert(((pipelineEnableMD->getNumOperands() == 6) ||
-              (pipelineEnableMD->getNumOperands() == 5)) &&
-             "Unexpected number of operands for llvm.loop.pipeline.enable");
-      return (pipelineEnableMD->getNumOperands() == 6);
-    }
-  }
-  return false;
-}
-
 bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
-  LI = &getAnalysis<LoopInfo>();
-
-  // TODO: Vitis HLS fails inserting ap_ctrl_none blackboxes in non-pipelined
-  // regions.
-  // To properly fix this issue we should define an ap_ctrl_hs blacbox and
-  // select it when BB belongs to a non-pipelined region.
-  // Moreover, we should also implement the check for pipelined functions.
-  if (auto L = LI->getLoopFor(&BB)) {
-    if (!isLoopPipeline(L))
-      return false;
-  }
-
   // FIXME: check if LLVM 3.1 provides alternatives to skipFunction
   // if (skipFunction(F))
   Function *F = BB.getParent();

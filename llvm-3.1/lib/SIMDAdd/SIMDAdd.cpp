@@ -303,10 +303,13 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
 
   AA = &getAnalysis<AliasAnalysis>();
 
-  bool modified = false;
-
   std::list<CandidateInst> candidateInsts;
   getSIMDableInstructions(BB, candidateInsts);
+
+  if (candidateInsts.size() < 2)
+    return false;
+
+  bool modified = false;
 
   candidateInsts.reverse();
   for (auto &candidateInstCurr : candidateInsts)

@@ -229,7 +229,7 @@ void getSIMDableInstructions(BasicBlock &BB,
       continue;
     if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1)))
       continue;
-    if (cast<IntegerType>(I.getType())->getBitWidth() <= 12) {
+    if (I.getType()->getScalarSizeInBits() <= 12) {
       CandidateInst candidate;
       candidate.inInsts.push_back(&I);
       candidate.outInsts.push_back(&I);
@@ -256,10 +256,10 @@ void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
       auto operand = instTuple[i].inInsts[0]->getOperand(j);
 
       auto arg =
-          (cast<IntegerType>(operand->getType())->getBitWidth() < 12)
-              ? builder.CreateZExt(operand, IntegerType::get(context, 12),
-                                   operand->getName() + "_zext")
-              : operand;
+          ((operand->getType()->getScalarSizeInBits() < 12)
+               ? builder.CreateZExt(operand, IntegerType::get(context, 12),
+                                    operand->getName() + "_zext")
+               : operand);
       args[i * instTuple[i].inInsts[0]->getNumOperands() + j] = arg;
     }
   }
@@ -270,8 +270,7 @@ void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
   for (int i = 0; i < instTuple.size(); ++i) {
     result[i] = builder.CreateExtractValue(
         sumAggr, i, instTuple[i].outInsts[0]->getName() + "_zext");
-    if (cast<IntegerType>(instTuple[i].outInsts[0]->getType())->getBitWidth() <
-        12)
+    if (instTuple[i].outInsts[0]->getType()->getScalarSizeInBits() < 12)
       result[i] =
           builder.CreateTrunc(result[i], instTuple[i].outInsts[0]->getType());
   }

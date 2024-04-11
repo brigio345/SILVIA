@@ -13,4 +13,5 @@ link_directories(${LLVM_LIBRARY_DIRS})
 
 add_subdirectory(SIMDAdd)
 add_subdirectory(DotProdize)
+add_subdirectory(BBToDot)
 

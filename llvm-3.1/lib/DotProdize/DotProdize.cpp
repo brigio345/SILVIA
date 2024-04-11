@@ -24,12 +24,17 @@ static RegisterPass<DotProdize> X("dot-prod-ize",
                                   false /* Only looks at CFG */,
                                   true /* Transformation Pass */);
 
-bool getDotProdTree(Instruction *addRoot,
-                    SmallVector<Instruction *, 8> &mulLeafs,
-                    SmallVector<Instruction *, 8> &addInternal) {
+struct DotProdTree {
+  Instruction *addRoot;
+  SmallVector<Instruction *, 8> addInternal;
+  SmallVector<Instruction *, 8> mulLeafs;
+};
+
+bool getDotProdTree(Instruction *addRoot, DotProdTree &tree) {
   if (addRoot->getOpcode() != Instruction::Add)
     return false;
 
+  tree.addRoot = addRoot;
   for (unsigned i = 0; i < addRoot->getNumOperands(); ++i) {
     auto op = dyn_cast<Instruction>(addRoot->getOperand(i));
     if (!op)
@@ -42,17 +47,18 @@ bool getDotProdTree(Instruction *addRoot,
 
     // The tree cannot absorb an op with multiple uses, since its value is
     // needed elsewhere too.
+    // TODO: Accept multiple uses too. We need to split the chain in that point.
     if (!op->hasOneUse())
       return false;
 
     switch (op->getOpcode()) {
     case Instruction::Mul:
-      mulLeafs.push_back(op);
+      tree.mulLeafs.push_back(op);
       break;
     case Instruction::Add:
-      if (!getDotProdTree(op, mulLeafs, addInternal))
+      if (!getDotProdTree(op, tree))
         return false;
-      addInternal.push_back(op);
+      tree.addInternal.push_back(op);
       break;
     default:
       return false;
@@ -62,22 +68,23 @@ bool getDotProdTree(Instruction *addRoot,
   return true;
 }
 
-void replaceTreeWithDotProds(Instruction *addRoot,
-                             SmallVector<Instruction *, 8> &mulLeafs,
-                             Function *dotProd, LLVMContext &context) {
-  IRBuilder<> builder(addRoot);
+void replaceTreeWithDotProds(DotProdTree &tree, Function *dotProd,
+                             LLVMContext &context) {
+  IRBuilder<> builder(tree.addRoot);
 
   SmallVector<Instruction *, 3> muls;
   Instruction *rootNew = nullptr;
-  for (unsigned i = 0; i < mulLeafs.size();) {
+  for (unsigned i = 0; i < tree.mulLeafs.size();) {
     Instruction *rootCurr = nullptr;
-    if ((i + 3) <= mulLeafs.size()) {
+    if ((i + 3) <= tree.mulLeafs.size()) {
       SmallVector<Value *, 6> args;
       for (unsigned j = 0; j < 3; ++j) {
-        args.push_back(cast<Instruction>(builder.CreateTrunc(
-            mulLeafs[i + j]->getOperand(0), IntegerType::get(context, 8))));
-        args.push_back(cast<Instruction>(builder.CreateTrunc(
-            mulLeafs[i + j]->getOperand(1), IntegerType::get(context, 8))));
+        args.push_back(cast<Instruction>(
+            builder.CreateTrunc(tree.mulLeafs[i + j]->getOperand(0),
+                                IntegerType::get(context, 8))));
+        args.push_back(cast<Instruction>(
+            builder.CreateTrunc(tree.mulLeafs[i + j]->getOperand(1),
+                                IntegerType::get(context, 8))));
       }
       rootCurr = cast<Instruction>(builder.CreateSExt(
           builder.CreateCall(dotProd, args), IntegerType::get(context, 58)));
@@ -85,7 +92,7 @@ void replaceTreeWithDotProds(Instruction *addRoot,
       i += 3;
     } else {
       rootCurr = cast<Instruction>(
-          builder.CreateSExt(mulLeafs[i], IntegerType::get(context, 58)));
+          builder.CreateSExt(tree.mulLeafs[i], IntegerType::get(context, 58)));
 
       i++;
     }
@@ -94,8 +101,9 @@ void replaceTreeWithDotProds(Instruction *addRoot,
                        : rootCurr);
   }
 
-  addRoot->replaceAllUsesWith(builder.CreateTrunc(rootNew, addRoot->getType()));
-  addRoot->eraseFromParent();
+  tree.addRoot->replaceAllUsesWith(
+      builder.CreateTrunc(rootNew, tree.addRoot->getType()));
+  tree.addRoot->eraseFromParent();
 }
 
 bool DotProdize::runOnBasicBlock(BasicBlock &BB) {
@@ -110,16 +118,14 @@ bool DotProdize::runOnBasicBlock(BasicBlock &BB) {
 
   LLVMContext &context = F->getContext();
 
-  SmallVector<SmallVector<Instruction *, 8>, 8> mulLeafsCandidates;
-  SmallVector<SmallVector<Instruction *, 8>, 8> addInternalCandidates;
-  SmallVector<Instruction *, 8> addRootCandidates;
+  SmallVector<DotProdTree, 8> candidates;
   // Iterate in reverse order to avoid collecting subset trees.
   for (auto II = BB.end(), IB = BB.begin(); II != IB; --II) {
     Instruction *I = II;
     if (I->getOpcode() == Instruction::Add) {
       bool subset = false;
-      for (auto &addInternal : addInternalCandidates) {
-        for (auto &add : addInternal) {
+      for (auto candidate : candidates) {
+        for (auto &add : candidate.addInternal) {
           if (add == I) {
             subset = true;
             break;
@@ -132,20 +138,14 @@ bool DotProdize::runOnBasicBlock(BasicBlock &BB) {
       if (subset)
         continue;
 
-      SmallVector<Instruction *, 8> mulLeafs;
-      SmallVector<Instruction *, 8> addInternal;
-      if (getDotProdTree(I, mulLeafs, addInternal)) {
-        mulLeafsCandidates.push_back(mulLeafs);
-        addInternalCandidates.push_back(addInternal);
-        addRootCandidates.push_back(I);
-      }
+      DotProdTree tree;
+      if (getDotProdTree(I, tree))
+        candidates.push_back(tree);
     }
   }
 
-  for (unsigned i = 0; i < addRootCandidates.size(); ++i) {
-    replaceTreeWithDotProds(addRootCandidates[i], mulLeafsCandidates[i],
-                            DotProdFunc, context);
-  }
+  for (unsigned i = 0; i < candidates.size(); ++i)
+    replaceTreeWithDotProds(candidates[i], DotProdFunc, context);
 
-  return (addRootCandidates.size() > 0);
+  return (candidates.size() > 0);
 }

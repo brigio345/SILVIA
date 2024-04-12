@@ -26,8 +26,12 @@ struct SIMDAdd : public BasicBlockPass {
 
   bool anticipateDefs(Instruction *inst, bool anticipateInst);
   bool posticipateUses(Instruction *inst, bool posticipateInst);
-  bool isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
-                     Instruction *lastInst);
+  Instruction *getFirstAliasingInst(Instruction *instToMove,
+                                    Instruction *firstInst,
+                                    Instruction *lastInst);
+  Instruction *getLastAliasingInst(Instruction *instToMove,
+                                   Instruction *firstInst,
+                                   Instruction *lastInst);
 
   AliasAnalysis *AA;
 };
@@ -115,13 +119,14 @@ Instruction *getFirstValueUse(Instruction *inst) {
   return firstUse;
 }
 
-bool SIMDAdd::isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
-                            Instruction *lastInst) {
+Instruction *SIMDAdd::getFirstAliasingInst(Instruction *instToMove,
+                                           Instruction *firstInst,
+                                           Instruction *lastInst) {
   auto loadToMove = dyn_cast<LoadInst>(instToMove);
   auto storeToMove = dyn_cast<StoreInst>(instToMove);
 
   if ((!loadToMove) && (!storeToMove))
-    return true;
+    return nullptr;
 
   AliasAnalysis::Location locToMove =
       (storeToMove ? AA->getLocation(storeToMove)
@@ -138,14 +143,17 @@ bool SIMDAdd::isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
     if (&I == lastInst)
       break;
 
+    if (&I == instToMove)
+      continue;
+
     if (dyn_cast<CallInst>(&I))
-      return false;
+      return &I;
 
     if (auto store = dyn_cast<StoreInst>(&I)) {
       auto loc = AA->getLocation(store);
 
       if (AA->alias(locToMove, loc) != AliasAnalysis::AliasResult::NoAlias)
-        return false;
+        return &I;
     }
 
     // If a load aliases with another load is not an issue. There is no need to
@@ -157,11 +165,67 @@ bool SIMDAdd::isMoveMemSafe(Instruction *instToMove, Instruction *firstInst,
       auto loc = AA->getLocation(load);
 
       if (AA->alias(locToMove, loc) != AliasAnalysis::AliasResult::NoAlias)
-        return false;
+        return &I;
     }
   }
 
-  return true;
+  return nullptr;
+}
+
+Instruction *SIMDAdd::getLastAliasingInst(Instruction *instToMove,
+                                          Instruction *firstInst,
+                                          Instruction *lastInst) {
+  auto loadToMove = dyn_cast<LoadInst>(instToMove);
+  auto storeToMove = dyn_cast<StoreInst>(instToMove);
+
+  if ((!loadToMove) && (!storeToMove))
+    return nullptr;
+
+  AliasAnalysis::Location locToMove =
+      (storeToMove ? AA->getLocation(storeToMove)
+                   : AA->getLocation(loadToMove));
+
+  bool toCheck = false;
+  auto BB = instToMove->getParent();
+  auto &instList = BB->getInstList();
+  for (auto BI = instList.rbegin(), BE = instList.rend(); BI != BE; ++BI) {
+    auto &I = *BI;
+    // Skip the instructions after the interval involved in the movement.
+    if ((!toCheck) && (&I != lastInst))
+      continue;
+    toCheck = true;
+
+    // Skip the instructions before the interval involved in the movement.
+    if (&I == firstInst)
+      break;
+
+    if (&I == instToMove)
+      continue;
+
+    if (dyn_cast<CallInst>(&I))
+      return &I;
+
+    if (auto store = dyn_cast<StoreInst>(&I)) {
+      auto loc = AA->getLocation(store);
+
+      if (AA->alias(locToMove, loc) != AliasAnalysis::AliasResult::NoAlias)
+        return &I;
+    }
+
+    // If a load aliases with another load is not an issue. There is no need to
+    // check.
+    if (loadToMove)
+      continue;
+
+    if (auto load = dyn_cast<LoadInst>(&I)) {
+      auto loc = AA->getLocation(load);
+
+      if (AA->alias(locToMove, loc) != AliasAnalysis::AliasResult::NoAlias)
+        return &I;
+    }
+  }
+
+  return nullptr;
 }
 
 bool SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
@@ -189,8 +253,9 @@ bool SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
   if (lastDef && (lastDef->getOpcode() != Instruction::PHI))
     insertionPoint = lastDef->getNextNode();
 
-  if (!isMoveMemSafe(inst, insertionPoint, inst))
-    return modified;
+  auto aliasingInst = getLastAliasingInst(inst, insertionPoint, inst);
+  if (aliasingInst)
+    insertionPoint = aliasingInst->getNextNode();
 
   inst->moveBefore(insertionPoint);
 
@@ -221,8 +286,9 @@ bool SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
   if (!insertionPoint)
     insertionPoint = instBB->getTerminator();
 
-  if (!isMoveMemSafe(inst, inst, insertionPoint))
-    return modified;
+  auto aliasingInst = getFirstAliasingInst(inst, insertionPoint, inst);
+  if (aliasingInst)
+    insertionPoint = aliasingInst;
 
   inst->moveBefore(insertionPoint);
 

@@ -12,30 +12,21 @@ proc csynth_design_simd {simd_op simd_factor solution_path llvm_install_path {si
 	csynth_design
 	exec unzip -o -d dut ${solution_path}/.autopilot/db/dut.hcp
 	set ::env(LD_LIBRARY_PATH) "${llvm_install_path}/lib/:$::env(LD_LIBRARY_PATH)"
-	switch $simd_op {
-		"add" {
-			exec ${llvm_install_path}/bin/llvm-link ${simd_root}/template/${simd_op}/${simd_op}.ll dut/a.o.3.bc -o dut/a.o.3.bc
-			exec ${llvm_install_path}/bin/opt -load ${llvm_install_path}/lib/LLVMSIMDAdd.so -basicaa -simd-add -simd-add-factor ${simd_factor} -dce dut/a.o.3.bc -o dut/a.o.3.bc |& cat | tee SIMDAdd.log
-		}
-		"dotprod" {
-			exec ${llvm_install_path}/bin/llvm-link ${simd_root}/template/${simd_op}/${simd_op}.ll dut/a.o.3.bc -o dut/a.o.3.bc
-			exec ${llvm_install_path}/bin/opt -load ${llvm_install_path}/lib/LLVMDotProdize.so -dot-prod-ize -dce dut/a.o.3.bc -o dut/a.o.3.bc |& cat | tee DotProdize.log
-		}
-		default {
-			puts "simd_op=$simd_op is invalid."
-		}
-	}
+	exec ${llvm_install_path}/bin/llvm-link ${simd_root}/template/${simd_op}/${simd_op}.ll dut/a.o.3.bc -o dut/a.o.3.bc
+	exec ${llvm_install_path}/bin/opt -load ${llvm_install_path}/lib/LLVMSIMDAdd.so -basicaa -simd-add -simd-add-op ${simd_op} -simd-add-factor ${simd_factor} -dce dut/a.o.3.bc -o dut/a.o.3.bc |& cat | tee SIMDAdd.log
 	exec zip -rj dut.hcp dut
 	read_checkpoint dut.hcp
 	csynth_design -hw_syn
 
-	foreach dir "syn impl" {
-		set simd_name "_simd_${simd_op}_${simd_factor}"
-		foreach f [glob -nocomplain ${solution_path}/${dir}/verilog/*${simd_name}.v] {
-			set fbasename [file tail $f]
-			if {[regexp "^(.*)${simd_name}\.v\$" $fbasename -> prefix]} {
-				file copy -force ${simd_root}/template/${simd_op}/${simd_op}.v $f
-				exec sh -c "sed -i 's/${simd_name}/${prefix}${simd_name}/g' $f"
+	if { ${simd_op} == "add" } {
+		foreach dir "syn impl" {
+			set simd_name "_simd_${simd_op}_${simd_factor}"
+			foreach f [glob -nocomplain ${solution_path}/${dir}/verilog/*${simd_name}.v] {
+				set fbasename [file tail $f]
+				if {[regexp "^(.*)${simd_name}\.v\$" $fbasename -> prefix]} {
+					file copy -force ${simd_root}/template/${simd_op}/${simd_op}.v $f
+					exec sh -c "sed -i 's/${simd_name}/${prefix}${simd_name}/g' $f"
+				}
 			}
 		}
 	}

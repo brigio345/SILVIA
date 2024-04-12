@@ -41,6 +41,11 @@ struct CandidateInst {
   Instruction *outInst;
 };
 
+struct DotProdTree {
+  CandidateInst candidate;
+  SmallVector<Instruction *, 8> addInternal;
+};
+
 char SIMDAdd::ID = 0;
 static RegisterPass<SIMDAdd> X("simd-add", "Map add instructions to SIMD DSPs",
                                false /* Only looks at CFG */,
@@ -296,9 +301,9 @@ bool SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
 }
 
 // Collect all the add instructions.
-std::list<CandidateInst>
-getSIMDableInstructions(BasicBlock &BB, const unsigned int SIMDFactor,
-                        const unsigned int SIMDDSPWidth) {
+std::list<CandidateInst> getSIMDableAdds(BasicBlock &BB,
+                                         const unsigned int SIMDFactor,
+                                         const unsigned int SIMDDSPWidth) {
   std::list<CandidateInst> candidateInsts;
 
   const auto addMaxWidth = (SIMDDSPWidth / SIMDFactor);
@@ -319,11 +324,194 @@ getSIMDableInstructions(BasicBlock &BB, const unsigned int SIMDFactor,
   return candidateInsts;
 }
 
-void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
-                              Instruction *insertBefore, Function *SIMDFunc,
-                              const unsigned int SIMDFactor,
-                              const unsigned int SIMDDSPWidth,
-                              LLVMContext &context) {
+bool getDotProdTree(Instruction *addRoot, DotProdTree &tree) {
+  if (addRoot->getOpcode() != Instruction::Add)
+    return false;
+
+  tree.candidate.outInst = addRoot;
+  for (unsigned i = 0; i < addRoot->getNumOperands(); ++i) {
+    auto op = dyn_cast<Instruction>(addRoot->getOperand(i));
+    if (!op)
+      return false;
+
+    if ((op->getOpcode() == Instruction::SExt) ||
+        (op->getOpcode() == Instruction::ZExt))
+      op = dyn_cast<Instruction>(op->getOperand(0));
+    if (!op)
+      return false;
+
+    // The tree cannot absorb an op with multiple uses, since its value is
+    // needed elsewhere too.
+    // TODO: Accept multiple uses too. We need to split the chain in that point.
+    if (!op->hasOneUse())
+      return false;
+
+    // TODO: One of the leafs can be an add (to be connected to PCIN).
+    switch (op->getOpcode()) {
+    case Instruction::Mul:
+      // if (op->getType()->getScalarSizeInBits() > 8)
+      // return false;
+
+      tree.candidate.inInsts.push_back(op);
+      break;
+    case Instruction::Add:
+      if (!getDotProdTree(op, tree))
+        return false;
+      tree.addInternal.push_back(op);
+      break;
+    default:
+      return false;
+    }
+  }
+
+  return true;
+}
+
+std::list<CandidateInst> getSIMDableMuladds(BasicBlock &BB) {
+  SmallVector<DotProdTree, 8> trees;
+  // Iterate in reverse order to avoid collecting subset trees.
+  for (auto II = BB.end(), IB = BB.begin(); II != IB; --II) {
+    Instruction *I = II;
+    if (I->getOpcode() == Instruction::Add) {
+      bool subset = false;
+      for (auto tree : trees) {
+        for (auto &add : tree.addInternal) {
+          if (add == I) {
+            subset = true;
+            break;
+          }
+        }
+        if (subset)
+          break;
+      }
+
+      if (subset)
+        continue;
+
+      DotProdTree tree;
+      if (getDotProdTree(I, tree))
+        trees.push_back(tree);
+    }
+  }
+
+  std::list<CandidateInst> candidates;
+  for (auto tree : trees)
+    candidates.push_back(tree.candidate);
+
+  return candidates;
+}
+
+std::list<CandidateInst>
+getSIMDableInstructions(BasicBlock &BB, const std::string &SIMDOp,
+                        const unsigned int SIMDFactor,
+                        const unsigned int SIMDDSPWidth) {
+  if (SIMDOp == "add")
+    return getSIMDableAdds(BB, SIMDFactor, SIMDDSPWidth);
+
+  if (SIMDOp == "muladd")
+    return getSIMDableMuladds(BB);
+
+  return std::list<CandidateInst>();
+}
+
+Value *getUnextendedValue(Value *V) {
+  if (auto I = dyn_cast<Instruction>(V)) {
+    if ((I->getOpcode() == Instruction::SExt) ||
+        (I->getOpcode() == Instruction::ZExt))
+      return getUnextendedValue(I->getOperand(0));
+  }
+
+  return V;
+}
+
+void replaceMuladdsWithSIMDCall(const CandidateInst &treeA,
+                                const CandidateInst &treeB,
+                                Instruction *insertBefore, Function *MulAdd,
+                                Function *ExtractProds, LLVMContext &context) {
+  IRBuilder<> builder(insertBefore);
+
+  SmallVector<Instruction *, 8> unpackedLeafsA;
+  std::list<Instruction *> unpackedLeafsB;
+
+  for (auto mulLeaf : treeB.inInsts)
+    unpackedLeafsB.push_back(cast<Instruction>(mulLeaf));
+
+  auto chainLenght = 0;
+  Value *P = ConstantInt::get(IntegerType::get(context, 48), 0);
+  SmallVector<Value *, 4> endsOfChain;
+  for (auto mulLeafA : treeA.inInsts) {
+    auto packed = false;
+    auto mulLeafInstA = cast<Instruction>(mulLeafA);
+    auto opA0 = mulLeafInstA->getOperand(0);
+    auto opA1 = mulLeafInstA->getOperand(1);
+    for (auto MI = unpackedLeafsB.begin(), ME = unpackedLeafsB.end(); MI != ME;
+         ++MI) {
+      auto mulLeafB = *MI;
+      auto opB0 = mulLeafB->getOperand(0);
+      auto opB1 = mulLeafB->getOperand(1);
+
+      if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) ||
+          (opA1 == opB1)) {
+        if ((chainLenght > 0) && ((chainLenght % 7) == 0)) {
+          endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
+          P = ConstantInt::get(IntegerType::get(context, 48), 0);
+        }
+        opA0 = getUnextendedValue(opA0);
+        opA1 = getUnextendedValue(opA1);
+        opB0 = getUnextendedValue(opB0);
+        opB1 = getUnextendedValue(opB1);
+        // pack mulLeafA and mulLeafB + sum P
+        // assign the result to P
+        Value *A = (((opA0 != opB0) && (opA0 != opB1)) ? opA0 : opA1);
+        Value *B = (((opB0 != opA0) && (opB0 != opA1)) ? opB0 : opB1);
+        Value *D = (((opA0 == opB0) && (opA0 == opB1)) ? opA0 : opA1);
+        Value *args[4] = {A, B, D, P};
+        P = builder.CreateCall(MulAdd, args);
+        chainLenght++;
+        packed = true;
+        unpackedLeafsB.erase(MI);
+        break;
+      }
+    }
+    if (!packed)
+      unpackedLeafsA.push_back(mulLeafInstA);
+  }
+
+  // 1. call extractProds from P
+  endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
+
+  // 2. sum the extracted prods to the unpacked leafs
+  Value *sumA = ConstantInt::get(IntegerType::get(context, 48), 0);
+  Value *sumB = ConstantInt::get(IntegerType::get(context, 48), 0);
+  for (auto endOfChain : endsOfChain) {
+    auto partialProdA = builder.CreateExtractValue(endOfChain, 0);
+    sumA = builder.CreateAdd(
+        sumA, builder.CreateSExt(partialProdA, IntegerType::get(context, 48)));
+    auto partialProdB = builder.CreateExtractValue(endOfChain, 0);
+    sumB = builder.CreateAdd(
+        sumA, builder.CreateSExt(partialProdB, IntegerType::get(context, 48)));
+  }
+  // 3. replaceAllUsesWith sumA and sumB
+  if (treeA.outInst->getType()->getScalarSizeInBits() < 48)
+    sumA = builder.CreateTrunc(
+        sumA, IntegerType::get(
+                  context, treeA.outInst->getType()->getScalarSizeInBits()));
+  treeA.outInst->replaceAllUsesWith(sumA);
+  if (treeB.outInst->getType()->getScalarSizeInBits() < 48)
+    sumB = builder.CreateTrunc(
+        sumB, IntegerType::get(
+                  context, treeB.outInst->getType()->getScalarSizeInBits()));
+  treeB.outInst->replaceAllUsesWith(sumB);
+
+  treeA.outInst->eraseFromParent();
+  treeB.outInst->eraseFromParent();
+}
+
+void replaceAddsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
+                             Instruction *insertBefore, Function *SIMDFunc,
+                             const unsigned int SIMDFactor,
+                             const unsigned int SIMDDSPWidth,
+                             LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
   const auto dataBitWidth = (SIMDDSPWidth / SIMDFactor);
@@ -369,8 +557,25 @@ void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
   }
 }
 
+void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
+                              Instruction *insertBefore, Function *SIMDFunc,
+                              Function *SIMDFuncExtract,
+                              const std::string SIMDOp,
+                              const unsigned int SIMDFactor,
+                              const unsigned int SIMDDSPWidth,
+                              LLVMContext &context) {
+  if (SIMDOp == "add") {
+    replaceAddsWithSIMDCall(instTuple, insertBefore, SIMDFunc, SIMDFactor,
+                            SIMDDSPWidth, context);
+  } else if (SIMDOp == "muladd") {
+    replaceMuladdsWithSIMDCall(instTuple[0], instTuple[1], insertBefore,
+                               SIMDFunc, SIMDFuncExtract, context);
+  }
+}
+
 bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
-  assert((SIMDOp == "add") && "Unexpected value for simd-add-op option.");
+  assert(((SIMDOp == "add") || (SIMDOp == "muladd")) &&
+         "Unexpected value for simd-add-op option.");
   assert(((SIMDFactor == 2) || (SIMDFactor == 4)) &&
          "Unexpected value for simd-add-factor option.");
   assert((SIMDDSPWidth == 48) &&
@@ -386,12 +591,19 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       module->getFunction("_simd_" + SIMDOp + "_" + std::to_string(SIMDFactor));
   assert(SIMDFunc && "SIMD function not found");
 
+  Function *SIMDFuncExtract = nullptr;
+  if (SIMDOp == "muladd") {
+    SIMDFuncExtract = module->getFunction("_simd_" + SIMDOp + "_extract_" +
+                                          std::to_string(SIMDFactor));
+    assert(SIMDFuncExtract && "SIMD extract function not found");
+  }
+
   LLVMContext &context = F->getContext();
 
   AA = &getAnalysis<AliasAnalysis>();
 
   std::list<CandidateInst> candidateInsts =
-      getSIMDableInstructions(BB, SIMDFactor, SIMDDSPWidth);
+      getSIMDableInstructions(BB, SIMDOp, SIMDFactor, SIMDDSPWidth);
 
   if (candidateInsts.size() < 2)
     return false;
@@ -400,7 +612,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
 
   candidateInsts.reverse();
   for (auto &candidateInstCurr : candidateInsts)
-    modified |= anticipateDefs(candidateInstCurr.inInsts[0]);
+    modified |= anticipateDefs(candidateInstCurr.outInst);
   candidateInsts.reverse();
   for (auto &candidateInstCurr : candidateInsts)
     modified |= posticipateUses(candidateInstCurr.outInst);
@@ -417,8 +629,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     for (auto CI = candidateInsts.begin(), CE = candidateInsts.end();
          CI != CE;) {
       CandidateInst candidateInstCurr = *CI;
-      Instruction *lastDefCurr =
-          getLastOperandDef(candidateInstCurr.inInsts[0]);
+      Instruction *lastDefCurr = getLastOperandDef(candidateInstCurr.outInst);
       Instruction *firstUseCurr = getFirstValueUse(candidateInstCurr.outInst);
 
       if ((!lastDefCurr) ||
@@ -438,7 +649,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       }
 
       auto compatible = true;
-      auto opInst = dyn_cast<Instruction>(candidateInstCurr.inInsts[0]);
+      auto opInst = dyn_cast<Instruction>(candidateInstCurr.outInst);
       for (auto selected : instTuple) {
         if (dependsOn(opInst, selected.outInst)) {
           compatible = false;
@@ -448,6 +659,29 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       if (!compatible) {
         CI++;
         continue;
+      }
+
+      if (SIMDOp == "muladd" && instTuple.size() > 0) {
+        for (auto mulLeafA : candidateInstCurr.inInsts) {
+          auto opA0 = dyn_cast<Instruction>(mulLeafA->getOperand(0));
+          auto opA1 = dyn_cast<Instruction>(mulLeafA->getOperand(1));
+          for (auto mulLeafB : instTuple[0].inInsts) {
+            auto opB0 = dyn_cast<Instruction>(mulLeafB->getOperand(0));
+            auto opB1 = dyn_cast<Instruction>(mulLeafB->getOperand(1));
+
+            if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) ||
+                (opA1 == opB1)) {
+              compatible = true;
+              break;
+            }
+            if (compatible)
+              break;
+          }
+        }
+        if (!compatible) {
+          CI++;
+          continue;
+        }
       }
 
       instTuple.push_back(candidateInstCurr);
@@ -466,8 +700,8 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     if (instTuple.size() < 2)
       continue;
 
-    replaceInstsWithSIMDCall(instTuple, firstUse, SIMDFunc, SIMDFactor,
-                             SIMDDSPWidth, context);
+    replaceInstsWithSIMDCall(instTuple, firstUse, SIMDFunc, SIMDFuncExtract,
+                             SIMDOp, SIMDFactor, SIMDDSPWidth, context);
     modified = true;
   }
 

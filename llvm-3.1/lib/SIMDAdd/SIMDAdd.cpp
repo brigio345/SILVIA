@@ -43,9 +43,17 @@ static RegisterPass<SIMDAdd> X("simd-add", "Map add instructions to SIMD DSPs",
                                true /* Transformation Pass */);
 
 static cl::opt<std::string>
-    SIMDOp("simd-add-op", cl::init("add4simd"), cl::Hidden,
+    SIMDOp("simd-add-op", cl::init("add"), cl::Hidden,
            cl::desc("The operation to map to SIMD DSPs. "
-                    "Possible values are: add4simd."));
+                    "Possible values are: add."));
+
+static cl::opt<unsigned int>
+    SIMDFactor("simd-add-factor", cl::init(4), cl::Hidden,
+               cl::desc("The amount of operations to map to SIMD DSPs."));
+
+static cl::opt<unsigned int> SIMDDSPWidth("simd-add-dsp-width", cl::init(48),
+                                          cl::Hidden,
+                                          cl::desc("The DSP width in bits."));
 
 bool dependsOn(Instruction *inst0, Instruction *inst1) {
   if (inst0->getParent() != inst1->getParent())
@@ -222,32 +230,41 @@ bool SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
 }
 
 // Collect all the add instructions.
-void getSIMDableInstructions(BasicBlock &BB,
-                             std::list<CandidateInst> &candidateInsts) {
+std::list<CandidateInst>
+getSIMDableInstructions(BasicBlock &BB, const unsigned int SIMDFactor,
+                        const unsigned int SIMDDSPWidth) {
+  std::list<CandidateInst> candidateInsts;
+
+  const auto addMaxWidth = (SIMDDSPWidth / SIMDFactor);
+
   for (auto &I : BB) {
     if (I.getOpcode() != Instruction::Add)
       continue;
     if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1)))
       continue;
-    if (I.getType()->getScalarSizeInBits() <= 12) {
+    if (I.getType()->getScalarSizeInBits() <= addMaxWidth) {
       CandidateInst candidate;
       candidate.inInsts.push_back(&I);
       candidate.outInst = &I;
       candidateInsts.push_back(candidate);
     }
-    // TODO: collect candidates for simd2
-    // else if (cast<IntegerType>(binOp->getType())->getBitWidth() <= 24)
-    // simd2Candidates.push_back(binOp);
   }
+
+  return candidateInsts;
 }
 
 void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
                               Instruction *insertBefore, Function *SIMDFunc,
+                              const unsigned int SIMDFactor,
+                              const unsigned int SIMDDSPWidth,
                               LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
+  const auto dataBitWidth = (SIMDDSPWidth / SIMDFactor);
+
   SmallVector<Value *, 8> args(
-      8, ConstantInt::get(IntegerType::get(context, 12), 0));
+      SIMDFunc->getArgumentList().size(),
+      ConstantInt::get(IntegerType::get(context, dataBitWidth), 0));
   std::string retName = "";
   for (unsigned i = 0; i < instTuple.size(); ++i) {
     retName = retName + ((retName == "") ? "" : "_") +
@@ -255,11 +272,11 @@ void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
     for (unsigned j = 0; j < instTuple[i].inInsts[0]->getNumOperands(); ++j) {
       auto operand = instTuple[i].inInsts[0]->getOperand(j);
 
-      auto arg =
-          ((operand->getType()->getScalarSizeInBits() < 12)
-               ? builder.CreateZExt(operand, IntegerType::get(context, 12),
-                                    operand->getName() + "_zext")
-               : operand);
+      auto arg = ((operand->getType()->getScalarSizeInBits() < dataBitWidth)
+                      ? builder.CreateZExt(
+                            operand, IntegerType::get(context, dataBitWidth),
+                            operand->getName() + "_zext")
+                      : operand);
       args[i * instTuple[i].inInsts[0]->getNumOperands() + j] = arg;
     }
   }
@@ -270,7 +287,7 @@ void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
   for (int i = 0; i < instTuple.size(); ++i) {
     result[i] = builder.CreateExtractValue(
         sumAggr, i, instTuple[i].outInst->getName() + "_zext");
-    if (instTuple[i].outInst->getType()->getScalarSizeInBits() < 12)
+    if (instTuple[i].outInst->getType()->getScalarSizeInBits() < dataBitWidth)
       result[i] =
           builder.CreateTrunc(result[i], instTuple[i].outInst->getType());
   }
@@ -287,23 +304,29 @@ void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
 }
 
 bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
+  assert((SIMDOp == "add") && "Unexpected value for simd-add-op option.");
+  assert(((SIMDFactor == 2) || (SIMDFactor == 4)) &&
+         "Unexpected value for simd-add-factor option.");
+  assert((SIMDDSPWidth == 48) &&
+         "Unexpected value for simd-add-dsp-width option.");
   // FIXME: check if LLVM 3.1 provides alternatives to skipFunction
   // if (skipFunction(F))
   Function *F = BB.getParent();
-  if (F->getName().startswith("_ssdm_op") || F->getName() == SIMDOp)
+  if (F->getName().startswith("_ssdm_op") || F->getName().startswith("_simd"))
     return false;
 
   // Get the SIMD function
   Module *module = F->getParent();
-  Function *SIMDFunc = module->getFunction(SIMDOp);
+  Function *SIMDFunc =
+      module->getFunction("_simd_" + SIMDOp + "_" + std::to_string(SIMDFactor));
   assert(SIMDFunc && "SIMD function not found");
 
   LLVMContext &context = F->getContext();
 
   AA = &getAnalysis<AliasAnalysis>();
 
-  std::list<CandidateInst> candidateInsts;
-  getSIMDableInstructions(BB, candidateInsts);
+  std::list<CandidateInst> candidateInsts =
+      getSIMDableInstructions(BB, SIMDFactor, SIMDDSPWidth);
 
   if (candidateInsts.size() < 2)
     return false;
@@ -317,9 +340,8 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
   for (auto &candidateInstCurr : candidateInsts)
     modified |= posticipateUses(candidateInstCurr.outInst);
 
-  // Build tuples of 4 instructions that can be mapped to the
+  // Build tuples of SIMDFactor instructions that can be mapped to the
   // same SIMD DSP.
-  // TODO: check if a size of 8 is a good choice
   while (!candidateInsts.empty()) {
     SmallVector<CandidateInst, 4> instTuple;
     Instruction *lastDef = nullptr;
@@ -332,8 +354,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       CandidateInst candidateInstCurr = *CI;
       Instruction *lastDefCurr =
           getLastOperandDef(candidateInstCurr.inInsts[0]);
-      Instruction *firstUseCurr =
-          getFirstValueUse(candidateInstCurr.outInst);
+      Instruction *firstUseCurr = getFirstValueUse(candidateInstCurr.outInst);
 
       if ((!lastDefCurr) ||
           (lastDef && (instMap[lastDefCurr] < instMap[lastDef])))
@@ -373,7 +394,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       // The current candidate was selected: it is not a candidate anymore.
       candidateInsts.erase(CI++);
 
-      if (instTuple.size() == 4)
+      if (instTuple.size() == SIMDFactor)
         break;
     }
 
@@ -381,7 +402,8 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     if (instTuple.size() < 2)
       continue;
 
-    replaceInstsWithSIMDCall(instTuple, firstUse, SIMDFunc, context);
+    replaceInstsWithSIMDCall(instTuple, firstUse, SIMDFunc, SIMDFactor,
+                             SIMDDSPWidth, context);
     modified = true;
   }
 

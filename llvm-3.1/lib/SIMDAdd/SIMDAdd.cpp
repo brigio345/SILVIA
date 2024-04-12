@@ -34,7 +34,7 @@ struct SIMDAdd : public BasicBlockPass {
 
 struct CandidateInst {
   SmallVector<Instruction *, 2> inInsts;
-  SmallVector<Instruction *, 1> outInsts;
+  Instruction *outInst;
 };
 
 char SIMDAdd::ID = 0;
@@ -232,7 +232,7 @@ void getSIMDableInstructions(BasicBlock &BB,
     if (I.getType()->getScalarSizeInBits() <= 12) {
       CandidateInst candidate;
       candidate.inInsts.push_back(&I);
-      candidate.outInsts.push_back(&I);
+      candidate.outInst = &I;
       candidateInsts.push_back(candidate);
     }
     // TODO: collect candidates for simd2
@@ -251,7 +251,7 @@ void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
   std::string retName = "";
   for (unsigned i = 0; i < instTuple.size(); ++i) {
     retName = retName + ((retName == "") ? "" : "_") +
-              instTuple[i].outInsts[0]->getName().str();
+              instTuple[i].outInst->getName().str();
     for (unsigned j = 0; j < instTuple[i].inInsts[0]->getNumOperands(); ++j) {
       auto operand = instTuple[i].inInsts[0]->getOperand(j);
 
@@ -269,18 +269,18 @@ void replaceInstsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,
   Value *result[4];
   for (int i = 0; i < instTuple.size(); ++i) {
     result[i] = builder.CreateExtractValue(
-        sumAggr, i, instTuple[i].outInsts[0]->getName() + "_zext");
-    if (instTuple[i].outInsts[0]->getType()->getScalarSizeInBits() < 12)
+        sumAggr, i, instTuple[i].outInst->getName() + "_zext");
+    if (instTuple[i].outInst->getType()->getScalarSizeInBits() < 12)
       result[i] =
-          builder.CreateTrunc(result[i], instTuple[i].outInsts[0]->getType());
+          builder.CreateTrunc(result[i], instTuple[i].outInst->getType());
   }
 
   // Replace the add instruction with the result
   for (unsigned i = 0; i < instTuple.size(); ++i) {
-    auto resName = instTuple[i].outInsts[0]->getName();
+    auto resName = instTuple[i].outInst->getName();
 
-    instTuple[i].outInsts[0]->replaceAllUsesWith(result[i]);
-    instTuple[i].outInsts[0]->eraseFromParent();
+    instTuple[i].outInst->replaceAllUsesWith(result[i]);
+    instTuple[i].outInst->eraseFromParent();
 
     result[i]->setName(resName);
   }
@@ -315,7 +315,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     modified |= anticipateDefs(candidateInstCurr.inInsts[0]);
   candidateInsts.reverse();
   for (auto &candidateInstCurr : candidateInsts)
-    modified |= posticipateUses(candidateInstCurr.outInsts[0]);
+    modified |= posticipateUses(candidateInstCurr.outInst);
 
   // Build tuples of 4 instructions that can be mapped to the
   // same SIMD DSP.
@@ -333,7 +333,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       Instruction *lastDefCurr =
           getLastOperandDef(candidateInstCurr.inInsts[0]);
       Instruction *firstUseCurr =
-          getFirstValueUse(candidateInstCurr.outInsts[0]);
+          getFirstValueUse(candidateInstCurr.outInst);
 
       if ((!lastDefCurr) ||
           (lastDef && (instMap[lastDefCurr] < instMap[lastDef])))
@@ -354,7 +354,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
       auto compatible = true;
       auto opInst = dyn_cast<Instruction>(candidateInstCurr.inInsts[0]);
       for (auto selected : instTuple) {
-        if (dependsOn(opInst, selected.outInsts[0])) {
+        if (dependsOn(opInst, selected.outInst)) {
           compatible = false;
           break;
         }

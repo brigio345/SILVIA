@@ -375,8 +375,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
          "Unexpected value for simd-add-factor option.");
   assert((SIMDDSPWidth == 48) &&
          "Unexpected value for simd-add-dsp-width option.");
-  // FIXME: check if LLVM 3.1 provides alternatives to skipFunction
-  // if (skipFunction(F))
+
   Function *F = BB.getParent();
   if (F->getName().startswith("_ssdm_op") || F->getName().startswith("_simd"))
     return false;
@@ -464,7 +463,6 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
         break;
     }
 
-    // TODO: maybe also skip tuples of size 2?
     if (instTuple.size() < 2)
       continue;
 

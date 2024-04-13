@@ -464,7 +464,7 @@ void replaceMuladdsWithSIMDCall(const CandidateInst &treeA,
         // assign the result to P
         Value *A = (((opA0 != opB0) && (opA0 != opB1)) ? opA0 : opA1);
         Value *B = (((opB0 != opA0) && (opB0 != opA1)) ? opB0 : opB1);
-        Value *D = (((opA0 == opB0) && (opA0 == opB1)) ? opA0 : opA1);
+        Value *D = (((opA0 == opB0) || (opA0 == opB1)) ? opA0 : opA1);
         Value *args[4] = {A, B, D, P};
         P = builder.CreateCall(MulAdd, args);
         chainLenght++;
@@ -487,9 +487,9 @@ void replaceMuladdsWithSIMDCall(const CandidateInst &treeA,
     auto partialProdA = builder.CreateExtractValue(endOfChain, 0);
     sumA = builder.CreateAdd(
         sumA, builder.CreateSExt(partialProdA, IntegerType::get(context, 48)));
-    auto partialProdB = builder.CreateExtractValue(endOfChain, 0);
+    auto partialProdB = builder.CreateExtractValue(endOfChain, 1);
     sumB = builder.CreateAdd(
-        sumA, builder.CreateSExt(partialProdB, IntegerType::get(context, 48)));
+        sumB, builder.CreateSExt(partialProdB, IntegerType::get(context, 48)));
   }
   // 3. replaceAllUsesWith sumA and sumB
   if (treeA.outInst->getType()->getScalarSizeInBits() < 48)

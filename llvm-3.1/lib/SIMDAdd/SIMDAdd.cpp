@@ -328,7 +328,6 @@ bool getDotProdTree(Instruction *addRoot, DotProdTree &tree) {
   if (addRoot->getOpcode() != Instruction::Add)
     return false;
 
-  tree.candidate.outInst = addRoot;
   for (unsigned i = 0; i < addRoot->getNumOperands(); ++i) {
     auto op = dyn_cast<Instruction>(addRoot->getOperand(i));
     if (!op)
@@ -364,6 +363,7 @@ bool getDotProdTree(Instruction *addRoot, DotProdTree &tree) {
     }
   }
 
+  tree.candidate.outInst = addRoot;
   return true;
 }
 

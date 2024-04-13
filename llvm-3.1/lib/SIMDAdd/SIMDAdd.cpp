@@ -348,9 +348,6 @@ bool getDotProdTree(Instruction *addRoot, DotProdTree &tree) {
     // TODO: One of the leafs can be an add (to be connected to PCIN).
     switch (op->getOpcode()) {
     case Instruction::Mul:
-      // if (op->getType()->getScalarSizeInBits() > 8)
-      // return false;
-
       tree.candidate.inInsts.push_back(op);
       break;
     case Instruction::Add:
@@ -365,6 +362,16 @@ bool getDotProdTree(Instruction *addRoot, DotProdTree &tree) {
 
   tree.candidate.outInst = addRoot;
   return true;
+}
+
+Value *getUnextendedValue(Value *V) {
+  if (auto I = dyn_cast<Instruction>(V)) {
+    if ((I->getOpcode() == Instruction::SExt) ||
+        (I->getOpcode() == Instruction::ZExt))
+      return getUnextendedValue(I->getOperand(0));
+  }
+
+  return V;
 }
 
 std::list<CandidateInst> getSIMDableMuladds(BasicBlock &BB) {
@@ -389,8 +396,22 @@ std::list<CandidateInst> getSIMDableMuladds(BasicBlock &BB) {
         continue;
 
       DotProdTree tree;
-      if (getDotProdTree(I, tree))
-        trees.push_back(tree);
+      if (getDotProdTree(I, tree)) {
+        auto valid = false;
+        for (auto inInst : tree.candidate.inInsts) {
+
+          valid = ((getUnextendedValue(inInst->getOperand(0))
+                        ->getType()
+                        ->getScalarSizeInBits() <= 8) &&
+                   ((getUnextendedValue(inInst->getOperand(1))
+                         ->getType()
+                         ->getScalarSizeInBits() <= 8)));
+          if (!valid)
+            break;
+        }
+        if (valid)
+          trees.push_back(tree);
+      }
     }
   }
 
@@ -412,16 +433,6 @@ getSIMDableInstructions(BasicBlock &BB, const std::string &SIMDOp,
     return getSIMDableMuladds(BB);
 
   return std::list<CandidateInst>();
-}
-
-Value *getUnextendedValue(Value *V) {
-  if (auto I = dyn_cast<Instruction>(V)) {
-    if ((I->getOpcode() == Instruction::SExt) ||
-        (I->getOpcode() == Instruction::ZExt))
-      return getUnextendedValue(I->getOperand(0));
-  }
-
-  return V;
 }
 
 void replaceMuladdsWithSIMDCall(const CandidateInst &treeA,

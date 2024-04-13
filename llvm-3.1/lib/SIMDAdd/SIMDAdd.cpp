@@ -466,7 +466,8 @@ void replaceMuladdsWithSIMDCall(const CandidateInst &treeA,
         Value *B = (((opB0 != opA0) && (opB0 != opA1)) ? opB0 : opB1);
         Value *D = (((opA0 == opB0) || (opA0 == opB1)) ? opA0 : opA1);
         Value *args[4] = {A, B, D, P};
-        P = builder.CreateCall(MulAdd, args);
+        P = builder.CreateCall(MulAdd, args,
+                               mulLeafA->getName() + "_" + mulLeafB->getName());
         chainLenght++;
         packed = true;
         unpackedLeafsB.erase(MI);
@@ -503,8 +504,14 @@ void replaceMuladdsWithSIMDCall(const CandidateInst &treeA,
                   context, treeB.outInst->getType()->getScalarSizeInBits()));
   treeB.outInst->replaceAllUsesWith(sumB);
 
+  auto sumAName = treeA.outInst->getName();
+  auto sumBName = treeB.outInst->getName();
+
   treeA.outInst->eraseFromParent();
   treeB.outInst->eraseFromParent();
+
+  sumA->setName(sumAName);
+  sumB->setName(sumBName);
 }
 
 void replaceAddsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,

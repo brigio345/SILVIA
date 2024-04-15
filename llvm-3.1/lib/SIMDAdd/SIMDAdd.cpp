@@ -468,21 +468,9 @@ void replaceMuladdsWithSIMDCall(const CandidateInst &treeA,
           P = ConstantInt::get(IntegerType::get(context, 48), 0);
         }
         opA0 = getUnextendedValue(opA0);
-        if (opA0->getType()->getScalarSizeInBits() < 8)
-          opA0 = builder.CreateSExt(opA0, IntegerType::get(context, 8),
-                                    opA0->getName() + "_sext");
         opA1 = getUnextendedValue(opA1);
-        if (opA1->getType()->getScalarSizeInBits() < 8)
-          opA1 = builder.CreateSExt(opA1, IntegerType::get(context, 8),
-                                    opA1->getName() + "_sext");
         opB0 = getUnextendedValue(opB0);
-        if (opB0->getType()->getScalarSizeInBits() < 8)
-          opB0 = builder.CreateSExt(opB0, IntegerType::get(context, 8),
-                                    opB0->getName() + "_sext");
         opB1 = getUnextendedValue(opB1);
-        if (opB1->getType()->getScalarSizeInBits() < 8)
-          opB1 = builder.CreateSExt(opB1, IntegerType::get(context, 8),
-                                    opB1->getName() + "_sext");
         // pack mulLeafA and mulLeafB + sum P
         // assign the result to P
         Value *A = (((opA0 != opB0) && (opA0 != opB1)) ? opA0 : opA1);

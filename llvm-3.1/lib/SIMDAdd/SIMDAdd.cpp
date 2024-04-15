@@ -527,25 +527,27 @@ void replaceMuladdsWithSIMDCall(const CandidateInst &treeA,
     }
   }
   // 3. replaceAllUsesWith sumA and sumB
-  if (treeA.outInst->getType()->getScalarSizeInBits() < 48)
-    sumA = builder.CreateTrunc(
-        sumA, IntegerType::get(
-                  context, treeA.outInst->getType()->getScalarSizeInBits()));
+  const auto rootASize = treeA.outInst->getType()->getScalarSizeInBits();
+  if (rootASize < sumA->getType()->getScalarSizeInBits())
+    sumA = builder.CreateTrunc(sumA, IntegerType::get(context, rootASize));
+  else if (rootASize > sumA->getType()->getScalarSizeInBits())
+    sumA = builder.CreateSExt(sumA, IntegerType::get(context, rootASize));
   treeA.outInst->replaceAllUsesWith(sumA);
-  if (treeB.outInst->getType()->getScalarSizeInBits() < 48)
-    sumB = builder.CreateTrunc(
-        sumB, IntegerType::get(
-                  context, treeB.outInst->getType()->getScalarSizeInBits()));
+  const auto rootBSize = treeB.outInst->getType()->getScalarSizeInBits();
+  if (rootBSize < sumB->getType()->getScalarSizeInBits())
+    sumB = builder.CreateTrunc(sumB, IntegerType::get(context, rootBSize));
+  else if (rootBSize > sumB->getType()->getScalarSizeInBits())
+    sumB = builder.CreateSExt(sumB, IntegerType::get(context, rootBSize));
   treeB.outInst->replaceAllUsesWith(sumB);
 
-  auto sumAName = treeA.outInst->getName();
-  auto sumBName = treeB.outInst->getName();
+  auto rootAName = treeA.outInst->getName();
+  auto rootBName = treeB.outInst->getName();
 
   treeA.outInst->eraseFromParent();
   treeB.outInst->eraseFromParent();
 
-  sumA->setName(sumAName);
-  sumB->setName(sumBName);
+  sumA->setName(rootAName);
+  sumB->setName(rootBName);
 }
 
 void replaceAddsWithSIMDCall(SmallVector<CandidateInst, 4> instTuple,

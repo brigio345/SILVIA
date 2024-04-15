@@ -477,6 +477,12 @@ void replaceMuladdsWithSIMDCall(const CandidateInst &treeA,
         Value *B = (((opB0 != opA0) && (opB0 != opA1)) ? opB0 : opB1);
         Value *D = (((opA0 == opB0) || (opA0 == opB1)) ? opA0 : opA1);
         Value *args[4] = {A, B, D, P};
+        for (auto i = 0; i < 4; ++i) {
+          if (args[i]->getType()->getScalarSizeInBits() < 8) {
+            args[i] = builder.CreateSExt(args[i], IntegerType::get(context, 8),
+                                         args[i]->getName() + "_sext");
+          }
+        }
         P = builder.CreateCall(MulAdd, args,
                                mulLeafA->getName() + "_" + mulLeafB->getName());
         chainLenght++;

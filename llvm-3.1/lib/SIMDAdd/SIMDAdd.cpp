@@ -10,6 +10,7 @@
 #include "llvm/Support/IRBuilder.h"
 
 #include <cassert>
+#include <cmath>
 #include <list>
 
 using namespace llvm;
@@ -499,15 +500,31 @@ void replaceMuladdsWithSIMDCall(const CandidateInst &treeA,
   endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
 
   // 2. sum the extracted prods to the unpacked leafs
-  Value *sumA = ConstantInt::get(IntegerType::get(context, 48), 0);
-  Value *sumB = ConstantInt::get(IntegerType::get(context, 48), 0);
-  for (auto endOfChain : endsOfChain) {
-    auto partialProdA = builder.CreateExtractValue(endOfChain, 0);
-    sumA = builder.CreateAdd(
-        sumA, builder.CreateSExt(partialProdA, IntegerType::get(context, 48)));
-    auto partialProdB = builder.CreateExtractValue(endOfChain, 1);
-    sumB = builder.CreateAdd(
-        sumB, builder.CreateSExt(partialProdB, IntegerType::get(context, 48)));
+  Value *sumA = nullptr;
+  Value *sumB = nullptr;
+  for (auto i = 0; i < endsOfChain.size(); ++i) {
+    const auto partialProdSize = unsigned(18 + std::ceil(std::log2(i + 1)));
+    auto partialProdA = builder.CreateExtractValue(endsOfChain[i], 0);
+    auto partialProdB = builder.CreateExtractValue(endsOfChain[i], 1);
+    if (partialProdSize > 18) {
+      partialProdA = builder.CreateSExt(
+          partialProdA, IntegerType::get(context, partialProdSize));
+      partialProdB = builder.CreateSExt(
+          partialProdB, IntegerType::get(context, partialProdSize));
+    }
+    if (!sumA) {
+      sumA = partialProdA;
+      sumB = partialProdB;
+    } else {
+      if (sumA->getType()->getScalarSizeInBits() < partialProdSize) {
+        sumA = builder.CreateSExt(sumA,
+                                  IntegerType::get(context, partialProdSize));
+        sumB = builder.CreateSExt(sumB,
+                                  IntegerType::get(context, partialProdSize));
+      }
+      sumA = builder.CreateAdd(sumA, partialProdA);
+      sumB = builder.CreateAdd(sumB, partialProdB);
+    }
   }
   // 3. replaceAllUsesWith sumA and sumB
   if (treeA.outInst->getType()->getScalarSizeInBits() < 48)

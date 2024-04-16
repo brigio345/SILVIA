@@ -8,6 +8,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/IRBuilder.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <cassert>
 #include <cmath>
@@ -443,7 +444,7 @@ void replaceMuladdsWithSIMDCall(const CandidateInst &treeA,
   IRBuilder<> builder(insertBefore);
 
   SmallVector<Instruction *, 8> unpackedLeafsA;
-  std::list<Instruction *> unpackedLeafsB;
+  SmallVector<Instruction *, 8> unpackedLeafsB;
 
   for (auto mulLeaf : treeB.inInsts)
     unpackedLeafsB.push_back(cast<Instruction>(mulLeaf));
@@ -525,6 +526,36 @@ void replaceMuladdsWithSIMDCall(const CandidateInst &treeA,
       sumA = builder.CreateAdd(sumA, partialProdA);
       sumB = builder.CreateAdd(sumB, partialProdB);
     }
+  }
+  // Sum the unpacked leafs.
+  for (auto i = 0; i < unpackedLeafsA.size(); ++i) {
+    Value *unpackedLeafA = unpackedLeafsA[i];
+    auto unpackedLeafASize = unpackedLeafA->getType()->getScalarSizeInBits();
+    const auto partialProdSize =
+        unsigned(18 + std::ceil(std::log2(i + 1 + endsOfChain.size())));
+    if (unpackedLeafASize < partialProdSize) {
+      unpackedLeafA = builder.CreateSExt(
+          unpackedLeafA, IntegerType::get(context, partialProdSize));
+    } else if (unpackedLeafASize > partialProdSize) {
+      unpackedLeafA = builder.CreateTrunc(
+          unpackedLeafA, IntegerType::get(context, partialProdSize));
+    }
+    sumA = builder.CreateAdd(sumA, unpackedLeafA);
+  }
+
+  for (auto i = 0; i < unpackedLeafsB.size(); ++i) {
+    Value *unpackedLeafB = unpackedLeafsB[i];
+    auto unpackedLeafBSize = unpackedLeafB->getType()->getScalarSizeInBits();
+    const auto partialProdSize =
+        unsigned(18 + std::ceil(std::log2(i + 1 + endsOfChain.size())));
+    if (unpackedLeafBSize < partialProdSize) {
+      unpackedLeafB = builder.CreateSExt(
+          unpackedLeafB, IntegerType::get(context, partialProdSize));
+    } else if (unpackedLeafBSize > partialProdSize) {
+      unpackedLeafB = builder.CreateTrunc(
+          unpackedLeafB, IntegerType::get(context, partialProdSize));
+    }
+    sumB = builder.CreateAdd(sumB, unpackedLeafB);
   }
   // 3. replaceAllUsesWith sumA and sumB
   const auto rootASize = treeA.outInst->getType()->getScalarSizeInBits();

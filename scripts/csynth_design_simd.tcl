@@ -5,6 +5,9 @@ package require tdom
 proc csynth_design_simd {simd_op simd_factor llvm_install_path {simd_root ".."}} {
 	set project_path [get_project -directory]
 	set solution_name [get_solution]
+	if { [file exists ${project_path}/${solution_name}_FE] } {
+	  file delete -force -- ${project_path}/${solution_name}_FE
+	}
 	file copy -force -- ${project_path}/${solution_name} ${project_path}/${solution_name}_FE
 	file rename ${project_path}/${solution_name}_FE/${solution_name}.aps ${project_path}/${solution_name}_FE/${solution_name}_FE.aps
 	set aps_file [open ${project_path}/${solution_name}_FE/${solution_name}_FE.aps r]

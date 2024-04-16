@@ -45,6 +45,8 @@ struct SILVIA : public BasicBlockPass {
   Instruction *getLastAliasingInst(Instruction *instToMove,
                                    Instruction *firstInst,
                                    Instruction *lastInst);
+  bool isCandidateCompatibleWithTuple(SILVIA::Candidate &candidate,
+                                      SmallVector<SILVIA::Candidate, 4> &tuple);
   void replaceInstsWithSIMDCall(SmallVector<SILVIA::Candidate, 4> instTuple,
                                 Instruction *insertBefore,
                                 LLVMContext &context);
@@ -646,6 +648,34 @@ void SILVIA::replaceInstsWithSIMDCall(
   }
 }
 
+bool isMuladdCandidateCompatibleWithTuple(
+    SILVIA::Candidate &candidate, SmallVector<SILVIA::Candidate, 4> &tuple) {
+  if (tuple.size() < 2)
+    return true;
+
+  for (auto mulLeafA : candidate.inInsts) {
+    auto opA0 = dyn_cast<Instruction>(mulLeafA->getOperand(0));
+    auto opA1 = dyn_cast<Instruction>(mulLeafA->getOperand(1));
+    for (auto mulLeafB : tuple[0].inInsts) {
+      auto opB0 = dyn_cast<Instruction>(mulLeafB->getOperand(0));
+      auto opB1 = dyn_cast<Instruction>(mulLeafB->getOperand(1));
+
+      if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) || (opA1 == opB1))
+        return true;
+    }
+  }
+
+  return false;
+}
+
+bool SILVIA::isCandidateCompatibleWithTuple(
+    SILVIA::Candidate &candidate, SmallVector<SILVIA::Candidate, 4> &tuple) {
+  if (SIMDOp == "muladd")
+    return isMuladdCandidateCompatibleWithTuple(candidate, tuple);
+
+  return true;
+}
+
 bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   assert(((SIMDOp == "add") || (SIMDOp == "muladd")) &&
          "Unexpected value for silvia-op option.");
@@ -732,27 +762,9 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
         continue;
       }
 
-      if (SIMDOp == "muladd" && instTuple.size() > 0) {
-        for (auto mulLeafA : candidateInstCurr.inInsts) {
-          auto opA0 = dyn_cast<Instruction>(mulLeafA->getOperand(0));
-          auto opA1 = dyn_cast<Instruction>(mulLeafA->getOperand(1));
-          for (auto mulLeafB : instTuple[0].inInsts) {
-            auto opB0 = dyn_cast<Instruction>(mulLeafB->getOperand(0));
-            auto opB1 = dyn_cast<Instruction>(mulLeafB->getOperand(1));
-
-            if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) ||
-                (opA1 == opB1)) {
-              compatible = true;
-              break;
-            }
-            if (compatible)
-              break;
-          }
-        }
-        if (!compatible) {
-          CI++;
-          continue;
-        }
+      if (!isCandidateCompatibleWithTuple(candidateInstCurr, instTuple)) {
+        CI++;
+        continue;
       }
 
       instTuple.push_back(candidateInstCurr);

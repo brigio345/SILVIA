@@ -265,6 +265,9 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       unpackedLeafA = builder.CreateTrunc(
           unpackedLeafA, IntegerType::get(context, partialProdSize));
     }
+
+    if (sumA->getType()->getScalarSizeInBits() < partialProdSize)
+      sumA = builder.CreateSExt(sumA, IntegerType::get(context, partialProdSize));
     sumA = builder.CreateAdd(sumA, unpackedLeafA);
   }
 
@@ -280,6 +283,9 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       unpackedLeafB = builder.CreateTrunc(
           unpackedLeafB, IntegerType::get(context, partialProdSize));
     }
+
+    if (sumB->getType()->getScalarSizeInBits() < partialProdSize)
+      sumB = builder.CreateSExt(sumB, IntegerType::get(context, partialProdSize));
     sumB = builder.CreateAdd(sumB, unpackedLeafB);
   }
   // 3. replaceAllUsesWith sumA and sumB

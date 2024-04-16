@@ -11,6 +11,7 @@ add_definitions(${LLVM_DEFINITIONS})
 include_directories(${LLVM_INCLUDE_DIRS})
 link_directories(${LLVM_LIBRARY_DIRS})
 
-add_subdirectory(SILVIA)
+add_subdirectory(SILVIAAdd)
+add_subdirectory(SILVIAMuladd)
 add_subdirectory(BBToDot)
 

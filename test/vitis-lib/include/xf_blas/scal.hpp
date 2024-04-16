@@ -47,11 +47,11 @@ namespace blas {
  * @param p_x the packed input vector stream
  * @param p_res the packed output vector stream
  */
-template <typename t_DataType, unsigned int t_ParEntries, typename t_IndexType = unsigned int>
+template <typename t_DataType, unsigned int t_ParEntries, typename t_MacDataType, typename t_IndexType = unsigned int>
 void scal(unsigned int p_n,
           t_DataType p_alpha,
           hls::stream<typename WideType<t_DataType, t_ParEntries>::t_TypeInt>& p_x,
-          hls::stream<typename WideType<t_DataType, t_ParEntries>::t_TypeInt>& p_res) {
+          hls::stream<typename WideType<t_MacDataType, t_ParEntries>::t_TypeInt>& p_res) {
 #ifndef __SYNTHESIS__
     assert((p_n % t_ParEntries) == 0);
 #endif
@@ -59,7 +59,7 @@ void scal(unsigned int p_n,
     for (t_IndexType i = 0; i < l_parEntries; ++i) {
 #pragma HLS PIPELINE
         WideType<t_DataType, t_ParEntries> l_valX;
-        WideType<t_DataType, t_ParEntries> l_valY;
+        WideType<t_MacDataType, t_ParEntries> l_valY;
         l_valX = p_x.read();
         for (unsigned int j = 0; j < t_ParEntries; ++j) {
             l_valY[j] = p_alpha * l_valX[j];

@@ -142,11 +142,11 @@ bool SILVIAMuladd::isCandidateCompatibleWithTuple(
     return true;
 
   for (auto mulLeafA : candidate.inInsts) {
-    auto opA0 = dyn_cast<Instruction>(mulLeafA->getOperand(0));
-    auto opA1 = dyn_cast<Instruction>(mulLeafA->getOperand(1));
+    auto opA0 = getUnextendedValue(dyn_cast<Instruction>(mulLeafA->getOperand(0)));
+    auto opA1 = getUnextendedValue(dyn_cast<Instruction>(mulLeafA->getOperand(1)));
     for (auto mulLeafB : tuple[0].inInsts) {
-      auto opB0 = dyn_cast<Instruction>(mulLeafB->getOperand(0));
-      auto opB1 = dyn_cast<Instruction>(mulLeafB->getOperand(1));
+      auto opB0 = getUnextendedValue(dyn_cast<Instruction>(mulLeafB->getOperand(0)));
+      auto opB1 = getUnextendedValue(dyn_cast<Instruction>(mulLeafB->getOperand(1)));
 
       if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) || (opA1 == opB1))
         return true;
@@ -180,13 +180,13 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   for (auto mulLeafA : treeA.inInsts) {
     auto packed = false;
     auto mulLeafInstA = cast<Instruction>(mulLeafA);
-    auto opA0 = mulLeafInstA->getOperand(0);
-    auto opA1 = mulLeafInstA->getOperand(1);
+    auto opA0 = getUnextendedValue(mulLeafInstA->getOperand(0));
+    auto opA1 = getUnextendedValue(mulLeafInstA->getOperand(1));
     for (auto MI = unpackedLeafsB.begin(), ME = unpackedLeafsB.end(); MI != ME;
          ++MI) {
       auto mulLeafB = *MI;
-      auto opB0 = mulLeafB->getOperand(0);
-      auto opB1 = mulLeafB->getOperand(1);
+      auto opB0 = getUnextendedValue(mulLeafB->getOperand(0));
+      auto opB1 = getUnextendedValue(mulLeafB->getOperand(1));
 
       if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) ||
           (opA1 == opB1)) {
@@ -194,10 +194,6 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
           endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
           P = ConstantInt::get(IntegerType::get(context, 48), 0);
         }
-        opA0 = getUnextendedValue(opA0);
-        opA1 = getUnextendedValue(opA1);
-        opB0 = getUnextendedValue(opB0);
-        opB1 = getUnextendedValue(opB1);
         // pack mulLeafA and mulLeafB + sum P
         // assign the result to P
         Value *A = (((opA0 != opB0) && (opA0 != opB1)) ? opA0 : opA1);

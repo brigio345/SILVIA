@@ -138,7 +138,7 @@ SILVIAMuladd::getSIMDableInstructions(BasicBlock &BB) {
 
 bool SILVIAMuladd::isCandidateCompatibleWithTuple(
     SILVIA::Candidate &candidate, SmallVector<SILVIA::Candidate, 4> &tuple) {
-  if (tuple.size() < 2)
+  if (tuple.size() < 1)
     return true;
 
   for (auto mulLeafA : candidate.inInsts) {

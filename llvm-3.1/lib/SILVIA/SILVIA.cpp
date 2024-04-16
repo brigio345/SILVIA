@@ -16,9 +16,9 @@
 
 using namespace llvm;
 
-struct SIMDAdd : public BasicBlockPass {
+struct SILVIA : public BasicBlockPass {
   static char ID;
-  SIMDAdd() : BasicBlockPass(ID) {}
+  SILVIA() : BasicBlockPass(ID) {}
 
   struct Candidate {
     SmallVector<Instruction *, 2> inInsts;
@@ -26,7 +26,7 @@ struct SIMDAdd : public BasicBlockPass {
   };
 
   struct DotProdTree {
-    SIMDAdd::Candidate candidate;
+    SILVIA::Candidate candidate;
     SmallVector<Instruction *, 8> addInternal;
   };
 
@@ -36,7 +36,7 @@ struct SIMDAdd : public BasicBlockPass {
     AU.addRequired<AliasAnalysis>();
   }
 
-  std::list<SIMDAdd::Candidate> getSIMDableInstructions(BasicBlock &BB);
+  std::list<SILVIA::Candidate> getSIMDableInstructions(BasicBlock &BB);
   bool anticipateDefs(Instruction *inst, bool anticipateInst);
   bool posticipateUses(Instruction *inst, bool posticipateInst);
   Instruction *getFirstAliasingInst(Instruction *instToMove,
@@ -45,7 +45,7 @@ struct SIMDAdd : public BasicBlockPass {
   Instruction *getLastAliasingInst(Instruction *instToMove,
                                    Instruction *firstInst,
                                    Instruction *lastInst);
-  void replaceInstsWithSIMDCall(SmallVector<SIMDAdd::Candidate, 4> instTuple,
+  void replaceInstsWithSIMDCall(SmallVector<SILVIA::Candidate, 4> instTuple,
                                 Instruction *insertBefore,
                                 LLVMContext &context);
 
@@ -54,23 +54,23 @@ struct SIMDAdd : public BasicBlockPass {
   Function *SIMDFuncExtract;
 };
 
-char SIMDAdd::ID = 0;
-static RegisterPass<SIMDAdd> X("simd-add", "Map add instructions to SIMD DSPs",
-                               false /* Only looks at CFG */,
-                               true /* Transformation Pass */);
+char SILVIA::ID = 0;
+static RegisterPass<SILVIA> X("silvia", "Pack instructions to SIMD DSPs",
+                              false /* Only looks at CFG */,
+                              true /* Transformation Pass */);
 
 static cl::opt<std::string>
-    SIMDOp("simd-add-op", cl::init("add"), cl::Hidden,
-           cl::desc("The operation to map to SIMD DSPs. "
-                    "Possible values are: add."));
+    SIMDOp("silvia-op", cl::init("add"), cl::Hidden,
+           cl::desc("The operation to pack to SIMD DSPs. "
+                    "Possible values are: add, muladd."));
 
 static cl::opt<unsigned int>
-    SIMDFactor("simd-add-factor", cl::init(4), cl::Hidden,
-               cl::desc("The amount of operations to map to SIMD DSPs."));
+    SIMDFactor("silvia-simd-factor", cl::init(4), cl::Hidden,
+               cl::desc("The amount of operations to pack to SIMD DSPs."));
 
-static cl::opt<unsigned int> SIMDDSPWidth("simd-add-dsp-width", cl::init(48),
-                                          cl::Hidden,
-                                          cl::desc("The DSP width in bits."));
+static cl::opt<unsigned int> DSPWidth("silvia-dsp-width", cl::init(48),
+                                      cl::Hidden,
+                                      cl::desc("The DSP width in bits."));
 
 bool dependsOn(Instruction *inst0, Instruction *inst1) {
   if (inst0->getParent() != inst1->getParent())
@@ -132,9 +132,9 @@ Instruction *getFirstValueUse(Instruction *inst) {
   return firstUse;
 }
 
-Instruction *SIMDAdd::getFirstAliasingInst(Instruction *instToMove,
-                                           Instruction *firstInst,
-                                           Instruction *lastInst) {
+Instruction *SILVIA::getFirstAliasingInst(Instruction *instToMove,
+                                          Instruction *firstInst,
+                                          Instruction *lastInst) {
   auto loadToMove = dyn_cast<LoadInst>(instToMove);
   auto storeToMove = dyn_cast<StoreInst>(instToMove);
 
@@ -185,9 +185,9 @@ Instruction *SIMDAdd::getFirstAliasingInst(Instruction *instToMove,
   return nullptr;
 }
 
-Instruction *SIMDAdd::getLastAliasingInst(Instruction *instToMove,
-                                          Instruction *firstInst,
-                                          Instruction *lastInst) {
+Instruction *SILVIA::getLastAliasingInst(Instruction *instToMove,
+                                         Instruction *firstInst,
+                                         Instruction *lastInst) {
   auto loadToMove = dyn_cast<LoadInst>(instToMove);
   auto storeToMove = dyn_cast<StoreInst>(instToMove);
 
@@ -241,7 +241,7 @@ Instruction *SIMDAdd::getLastAliasingInst(Instruction *instToMove,
   return nullptr;
 }
 
-bool SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
+bool SILVIA::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
   // TODO: Anticipate calls if not crossing other calls or loads/stores.
   auto opcode = inst->getOpcode();
   if ((opcode == Instruction::PHI) || (opcode == Instruction::Call))
@@ -275,7 +275,7 @@ bool SIMDAdd::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
   return true;
 }
 
-bool SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
+bool SILVIA::posticipateUses(Instruction *inst, bool posticipateInst = false) {
   // TODO: Posticipate calls if not crossing other calls or loads/stores.
   auto opcode = inst->getOpcode();
   if ((opcode == Instruction::PHI) || (opcode == Instruction::Call))
@@ -309,12 +309,12 @@ bool SIMDAdd::posticipateUses(Instruction *inst, bool posticipateInst = false) {
 }
 
 // Collect all the add instructions.
-std::list<SIMDAdd::Candidate> getSIMDableAdds(BasicBlock &BB,
-                                              const unsigned int SIMDFactor,
-                                              const unsigned int SIMDDSPWidth) {
-  std::list<SIMDAdd::Candidate> candidateInsts;
+std::list<SILVIA::Candidate> getSIMDableAdds(BasicBlock &BB,
+                                             const unsigned int SIMDFactor,
+                                             const unsigned int DSPWidth) {
+  std::list<SILVIA::Candidate> candidateInsts;
 
-  const auto addMaxWidth = (SIMDDSPWidth / SIMDFactor);
+  const auto addMaxWidth = (DSPWidth / SIMDFactor);
 
   for (auto &I : BB) {
     if (I.getOpcode() != Instruction::Add)
@@ -322,7 +322,7 @@ std::list<SIMDAdd::Candidate> getSIMDableAdds(BasicBlock &BB,
     if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1)))
       continue;
     if (I.getType()->getScalarSizeInBits() <= addMaxWidth) {
-      SIMDAdd::Candidate candidate;
+      SILVIA::Candidate candidate;
       candidate.inInsts.push_back(&I);
       candidate.outInst = &I;
       candidateInsts.push_back(candidate);
@@ -332,7 +332,7 @@ std::list<SIMDAdd::Candidate> getSIMDableAdds(BasicBlock &BB,
   return candidateInsts;
 }
 
-bool getDotProdTree(Instruction *addRoot, SIMDAdd::DotProdTree &tree) {
+bool getDotProdTree(Instruction *addRoot, SILVIA::DotProdTree &tree) {
   if (addRoot->getOpcode() != Instruction::Add)
     return false;
 
@@ -382,8 +382,8 @@ Value *getUnextendedValue(Value *V) {
   return V;
 }
 
-std::list<SIMDAdd::Candidate> getSIMDableMuladds(BasicBlock &BB) {
-  SmallVector<SIMDAdd::DotProdTree, 8> trees;
+std::list<SILVIA::Candidate> getSIMDableMuladds(BasicBlock &BB) {
+  SmallVector<SILVIA::DotProdTree, 8> trees;
   // Iterate in reverse order to avoid collecting subset trees.
   for (auto II = BB.end(), IB = BB.begin(); II != IB; --II) {
     Instruction *I = II;
@@ -403,7 +403,7 @@ std::list<SIMDAdd::Candidate> getSIMDableMuladds(BasicBlock &BB) {
       if (subset)
         continue;
 
-      SIMDAdd::DotProdTree tree;
+      SILVIA::DotProdTree tree;
       if (getDotProdTree(I, tree)) {
         auto valid = false;
         for (auto inInst : tree.candidate.inInsts) {
@@ -423,25 +423,25 @@ std::list<SIMDAdd::Candidate> getSIMDableMuladds(BasicBlock &BB) {
     }
   }
 
-  std::list<SIMDAdd::Candidate> candidates;
+  std::list<SILVIA::Candidate> candidates;
   for (auto tree : trees)
     candidates.push_back(tree.candidate);
 
   return candidates;
 }
 
-std::list<SIMDAdd::Candidate> SIMDAdd::getSIMDableInstructions(BasicBlock &BB) {
+std::list<SILVIA::Candidate> SILVIA::getSIMDableInstructions(BasicBlock &BB) {
   if (SIMDOp == "add")
-    return getSIMDableAdds(BB, SIMDFactor, SIMDDSPWidth);
+    return getSIMDableAdds(BB, SIMDFactor, DSPWidth);
 
   if (SIMDOp == "muladd")
     return getSIMDableMuladds(BB);
 
-  return std::list<SIMDAdd::Candidate>();
+  return std::list<SILVIA::Candidate>();
 }
 
-void replaceMuladdsWithSIMDCall(const SIMDAdd::Candidate &treeA,
-                                const SIMDAdd::Candidate &treeB,
+void replaceMuladdsWithSIMDCall(const SILVIA::Candidate &treeA,
+                                const SILVIA::Candidate &treeB,
                                 Instruction *insertBefore, Function *MulAdd,
                                 Function *ExtractProds, LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
@@ -584,14 +584,14 @@ void replaceMuladdsWithSIMDCall(const SIMDAdd::Candidate &treeA,
   sumB->setName(rootBName);
 }
 
-void replaceAddsWithSIMDCall(SmallVector<SIMDAdd::Candidate, 4> instTuple,
+void replaceAddsWithSIMDCall(SmallVector<SILVIA::Candidate, 4> instTuple,
                              Instruction *insertBefore, Function *SIMDFunc,
                              const unsigned int SIMDFactor,
-                             const unsigned int SIMDDSPWidth,
+                             const unsigned int DSPWidth,
                              LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
-  const auto dataBitWidth = (SIMDDSPWidth / SIMDFactor);
+  const auto dataBitWidth = (DSPWidth / SIMDFactor);
 
   SmallVector<Value *, 8> args(
       SIMDFunc->getArgumentList().size(),
@@ -634,25 +634,24 @@ void replaceAddsWithSIMDCall(SmallVector<SIMDAdd::Candidate, 4> instTuple,
   }
 }
 
-void SIMDAdd::replaceInstsWithSIMDCall(
-    SmallVector<SIMDAdd::Candidate, 4> instTuple, Instruction *insertBefore,
+void SILVIA::replaceInstsWithSIMDCall(
+    SmallVector<SILVIA::Candidate, 4> instTuple, Instruction *insertBefore,
     LLVMContext &context) {
   if (SIMDOp == "add") {
     replaceAddsWithSIMDCall(instTuple, insertBefore, SIMDFunc, SIMDFactor,
-                            SIMDDSPWidth, context);
+                            DSPWidth, context);
   } else if (SIMDOp == "muladd") {
     replaceMuladdsWithSIMDCall(instTuple[0], instTuple[1], insertBefore,
                                SIMDFunc, SIMDFuncExtract, context);
   }
 }
 
-bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
+bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   assert(((SIMDOp == "add") || (SIMDOp == "muladd")) &&
-         "Unexpected value for simd-add-op option.");
+         "Unexpected value for silvia-op option.");
   assert(((SIMDFactor == 2) || (SIMDFactor == 4)) &&
-         "Unexpected value for simd-add-factor option.");
-  assert((SIMDDSPWidth == 48) &&
-         "Unexpected value for simd-add-dsp-width option.");
+         "Unexpected value for silvia-simd-factor option.");
+  assert((DSPWidth == 48) && "Unexpected value for silvia-dsp-width option.");
 
   Function *F = BB.getParent();
   if (F->getName().startswith("_ssdm_op") || F->getName().startswith("_simd"))
@@ -675,7 +674,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
 
   AA = &getAnalysis<AliasAnalysis>();
 
-  std::list<SIMDAdd::Candidate> candidateInsts = getSIMDableInstructions(BB);
+  std::list<SILVIA::Candidate> candidateInsts = getSIMDableInstructions(BB);
 
   if (candidateInsts.size() < 2)
     return false;
@@ -692,7 +691,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
   // Build tuples of SIMDFactor instructions that can be mapped to the
   // same SIMD DSP.
   while (!candidateInsts.empty()) {
-    SmallVector<SIMDAdd::Candidate, 4> instTuple;
+    SmallVector<SILVIA::Candidate, 4> instTuple;
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
@@ -700,7 +699,7 @@ bool SIMDAdd::runOnBasicBlock(BasicBlock &BB) {
     getInstMap(&BB, instMap);
     for (auto CI = candidateInsts.begin(), CE = candidateInsts.end();
          CI != CE;) {
-      SIMDAdd::Candidate candidateInstCurr = *CI;
+      SILVIA::Candidate candidateInstCurr = *CI;
       Instruction *lastDefCurr = getLastOperandDef(candidateInstCurr.outInst);
       Instruction *firstUseCurr = getFirstValueUse(candidateInstCurr.outInst);
 

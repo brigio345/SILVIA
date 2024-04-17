@@ -4,8 +4,8 @@
 #include <cstdint>
 #include <ap_int.h>
 
-constexpr int N = 64;
-constexpr int PAR = 8;
+constexpr int N = 512;
+constexpr int PAR = 64;
 constexpr int SEED = 123;
 
 constexpr unsigned log2ceil(uint64_t value) {

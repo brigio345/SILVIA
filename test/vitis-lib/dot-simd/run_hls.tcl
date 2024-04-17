@@ -18,6 +18,6 @@ create_clock -period "300MHz"
 csim_design
 # csynth_design
 csynth_design_simd "muladd" 2 ${PROJ_NAME}/solution1 ../../../llvm-3.1/llvm/install ../../..
-cosim_design
+# cosim_design
 
 exit

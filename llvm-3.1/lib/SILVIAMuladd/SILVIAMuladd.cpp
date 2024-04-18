@@ -16,7 +16,7 @@ struct SILVIAMuladd : public SILVIA {
   static char ID;
   SILVIAMuladd() : SILVIA(ID) {}
 
-  struct DotProdTree {
+  struct AddTree {
     SILVIA::Candidate candidate;
     SmallVector<Instruction *, 8> addInternal;
   };
@@ -42,46 +42,6 @@ static RegisterPass<SILVIAMuladd> X("silvia-muladd",
                                     false /* Only looks at CFG */,
                                     true /* Transformation Pass */);
 
-bool getDotProdTree(Instruction *addRoot, SILVIAMuladd::DotProdTree &tree) {
-  if (addRoot->getOpcode() != Instruction::Add)
-    return false;
-
-  for (unsigned i = 0; i < addRoot->getNumOperands(); ++i) {
-    auto op = dyn_cast<Instruction>(addRoot->getOperand(i));
-    if (!op)
-      return false;
-
-    if ((op->getOpcode() == Instruction::SExt) ||
-        (op->getOpcode() == Instruction::ZExt))
-      op = dyn_cast<Instruction>(op->getOperand(0));
-    if (!op)
-      return false;
-
-    // The tree cannot absorb an op with multiple uses, since its value is
-    // needed elsewhere too.
-    // TODO: Accept multiple uses too. We need to split the chain in that point.
-    if (!op->hasOneUse())
-      return false;
-
-    // TODO: One of the leafs can be an add (to be connected to PCIN).
-    switch (op->getOpcode()) {
-    case Instruction::Mul:
-      tree.candidate.inVals.push_back(op);
-      break;
-    case Instruction::Add:
-      if (!getDotProdTree(op, tree))
-        return false;
-      tree.addInternal.push_back(op);
-      break;
-    default:
-      return false;
-    }
-  }
-
-  tree.candidate.outInst = addRoot;
-  return true;
-}
-
 Value *getUnextendedValue(Value *V) {
   if (auto I = dyn_cast<Instruction>(V)) {
     if ((I->getOpcode() == Instruction::SExt) ||
@@ -92,9 +52,39 @@ Value *getUnextendedValue(Value *V) {
   return V;
 }
 
+void getAddTree(Instruction *root, SILVIAMuladd::AddTree &tree) {
+  if (root->getOpcode() != Instruction::Add) {
+    tree.candidate.inVals.push_back(root);
+    return;
+  }
+
+  for (unsigned i = 0; i < root->getNumOperands(); ++i) {
+    auto op = getUnextendedValue(root->getOperand(i));
+
+    auto opInst = dyn_cast<Instruction>(op);
+
+    if (!opInst) {
+      tree.candidate.inVals.push_back(op);
+      continue;
+    }
+
+    // The tree cannot absorb an op with multiple uses, since its value is
+    // needed elsewhere too.
+    // TODO: Accept multiple uses too. We need to split the chain in that point.
+    if (opInst->hasOneUse() && (opInst->getOpcode() == Instruction::Add)) {
+      getAddTree(opInst, tree);
+      tree.addInternal.push_back(opInst);
+    } else {
+      tree.candidate.inVals.push_back(op);
+    }
+  }
+
+  tree.candidate.outInst = root;
+}
+
 std::list<SILVIA::Candidate>
 SILVIAMuladd::getSIMDableInstructions(BasicBlock &BB) {
-  SmallVector<SILVIAMuladd::DotProdTree, 8> trees;
+  SmallVector<SILVIAMuladd::AddTree, 8> trees;
   // Iterate in reverse order to avoid collecting subset trees.
   for (auto II = BB.end(), IB = BB.begin(); II != IB; --II) {
     Instruction *I = II;
@@ -114,23 +104,26 @@ SILVIAMuladd::getSIMDableInstructions(BasicBlock &BB) {
       if (subset)
         continue;
 
-      SILVIAMuladd::DotProdTree tree;
-      if (getDotProdTree(I, tree)) {
-        auto valid = false;
-        for (auto inVal : tree.candidate.inVals) {
-          auto leafInst = cast<Instruction>(inVal);
-          valid = ((getUnextendedValue(leafInst->getOperand(0))
-                        ->getType()
-                        ->getScalarSizeInBits() <= 8) &&
-                   ((getUnextendedValue(leafInst->getOperand(1))
-                         ->getType()
-                         ->getScalarSizeInBits() <= 8)));
-          if (!valid)
-            break;
+      SILVIAMuladd::AddTree tree;
+      getAddTree(I, tree);
+
+      auto validMuls = 0;
+      for (auto leaf : tree.candidate.inVals) {
+        if (auto leafInst = dyn_cast<Instruction>(leaf)) {
+          if (leafInst->getOpcode() != Instruction::Mul)
+            continue;
+
+          validMuls += ((getUnextendedValue(leafInst->getOperand(0))
+                             ->getType()
+                             ->getScalarSizeInBits() <= 8) &&
+                        ((getUnextendedValue(leafInst->getOperand(1))
+                              ->getType()
+                              ->getScalarSizeInBits() <= 8)));
         }
-        if (valid)
-          trees.push_back(tree);
       }
+
+      if (validMuls > 1)
+        trees.push_back(tree);
     }
   }
 
@@ -147,12 +140,19 @@ bool SILVIAMuladd::isCandidateCompatibleWithTuple(
     return true;
 
   for (auto mulLeafA : candidate.inVals) {
-    auto mulLeafInstA = cast<Instruction>(mulLeafA);
+    auto mulLeafInstA = dyn_cast<Instruction>(mulLeafA);
+
+    if ((!mulLeafInstA) || (mulLeafInstA->getOpcode() != Instruction::Mul))
+      continue;
+
     // TODO: Check if the dyn_casts do not return nullptr.
     auto opA0 =
         getUnextendedValue(dyn_cast<Instruction>(mulLeafInstA->getOperand(0)));
     auto opA1 =
         getUnextendedValue(dyn_cast<Instruction>(mulLeafInstA->getOperand(1)));
+    if ((opA0->getType()->getScalarSizeInBits() > 8) ||
+        (opA1->getType()->getScalarSizeInBits() > 8))
+      continue;
     for (auto mulLeafB : tuple[0].inVals) {
       auto mulLeafInstB = cast<Instruction>(mulLeafB);
       // TODO: Check if the dyn_casts do not return nullptr.
@@ -181,21 +181,50 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
 
   IRBuilder<> builder(insertBefore);
 
-  SmallVector<Instruction *, 8> unpackedLeafsA;
-  SmallVector<Instruction *, 8> unpackedLeafsB;
+  SmallVector<Value *, 8> unpackedLeafsA;
+  SmallVector<Instruction *, 8> unpackedMulsA;
+  SmallVector<Value *, 8> unpackedLeafsB;
+  SmallVector<Instruction *, 8> unpackedMulsB;
 
-  for (auto mulLeaf : treeB.inVals)
-    unpackedLeafsB.push_back(cast<Instruction>(mulLeaf));
+  for (auto leaf : treeA.inVals) {
+    auto leafInst = dyn_cast<Instruction>(leaf);
+
+    if ((!leafInst) || (leafInst->getOpcode() != Instruction::Mul) ||
+        ((getUnextendedValue(leafInst->getOperand(0))
+              ->getType()
+              ->getScalarSizeInBits() > 8) ||
+         (getUnextendedValue(leafInst->getOperand(1))
+              ->getType()
+              ->getScalarSizeInBits() > 8)))
+      unpackedLeafsA.push_back(leaf);
+    else
+      unpackedMulsA.push_back(leafInst);
+  }
+
+  for (auto leaf : treeB.inVals) {
+    auto leafInst = dyn_cast<Instruction>(leaf);
+
+    if ((!leafInst) || (leafInst->getOpcode() != Instruction::Mul) ||
+        ((getUnextendedValue(leafInst->getOperand(0))
+              ->getType()
+              ->getScalarSizeInBits() > 8) ||
+         (getUnextendedValue(leafInst->getOperand(1))
+              ->getType()
+              ->getScalarSizeInBits() > 8)))
+      unpackedLeafsB.push_back(leaf);
+    else
+      unpackedMulsB.push_back(leafInst);
+  }
 
   auto chainLenght = 0;
   Value *P = ConstantInt::get(IntegerType::get(context, 48), 0);
   SmallVector<Value *, 4> endsOfChain;
-  for (auto mulLeafA : treeA.inVals) {
+  for (auto mulLeafA : unpackedMulsA) {
     auto packed = false;
     auto mulLeafInstA = cast<Instruction>(mulLeafA);
     auto opA0 = getUnextendedValue(mulLeafInstA->getOperand(0));
     auto opA1 = getUnextendedValue(mulLeafInstA->getOperand(1));
-    for (auto MI = unpackedLeafsB.begin(), ME = unpackedLeafsB.end(); MI != ME;
+    for (auto MI = unpackedMulsB.begin(), ME = unpackedMulsB.end(); MI != ME;
          ++MI) {
       auto mulLeafB = *MI;
       auto opB0 = getUnextendedValue(mulLeafB->getOperand(0));
@@ -223,13 +252,16 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
                                mulLeafA->getName() + "_" + mulLeafB->getName());
         chainLenght++;
         packed = true;
-        unpackedLeafsB.erase(MI);
+        unpackedMulsB.erase(MI);
         break;
       }
     }
     if (!packed)
       unpackedLeafsA.push_back(mulLeafInstA);
   }
+
+  for (auto mul : unpackedMulsB)
+    unpackedLeafsB.push_back(mul);
 
   // 1. call extractProds from P
   endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
@@ -262,55 +294,54 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
     }
   }
   // Sum the unpacked leafs.
+  // TODO: Maybe the partial sums should have higher bitwidth to reduce
+  // overflow risk with signed numbers.
+  const auto rootASize = treeA.outInst->getType()->getScalarSizeInBits();
+  if (rootASize < sumA->getType()->getScalarSizeInBits())
+    sumA = builder.CreateTrunc(sumA, IntegerType::get(context, rootASize));
+  else if (rootASize > sumA->getType()->getScalarSizeInBits())
+    sumA = builder.CreateSExt(sumA, IntegerType::get(context, rootASize));
+  const auto rootBSize = treeB.outInst->getType()->getScalarSizeInBits();
+  if (rootBSize < sumB->getType()->getScalarSizeInBits())
+    sumB = builder.CreateTrunc(sumB, IntegerType::get(context, rootBSize));
+  else if (rootBSize > sumB->getType()->getScalarSizeInBits())
+    sumB = builder.CreateSExt(sumB, IntegerType::get(context, rootBSize));
+
   for (auto i = 0; i < unpackedLeafsA.size(); ++i) {
     Value *unpackedLeafA = unpackedLeafsA[i];
     auto unpackedLeafASize = unpackedLeafA->getType()->getScalarSizeInBits();
-    const auto partialProdSize =
-        unsigned(18 + std::ceil(std::log2(i + 1 + endsOfChain.size())));
-    if (unpackedLeafASize < partialProdSize) {
-      unpackedLeafA = builder.CreateSExt(
-          unpackedLeafA, IntegerType::get(context, partialProdSize));
-    } else if (unpackedLeafASize > partialProdSize) {
-      unpackedLeafA = builder.CreateTrunc(
-          unpackedLeafA, IntegerType::get(context, partialProdSize));
+    if (unpackedLeafASize < rootASize) {
+      unpackedLeafA = builder.CreateSExt(unpackedLeafA,
+                                         IntegerType::get(context, rootASize));
+    } else if (unpackedLeafASize > rootASize) {
+      unpackedLeafA = builder.CreateTrunc(unpackedLeafA,
+                                          IntegerType::get(context, rootASize));
     }
 
-    if (sumA->getType()->getScalarSizeInBits() < partialProdSize)
-      sumA =
-          builder.CreateSExt(sumA, IntegerType::get(context, partialProdSize));
     sumA = builder.CreateAdd(sumA, unpackedLeafA);
   }
 
   for (auto i = 0; i < unpackedLeafsB.size(); ++i) {
     Value *unpackedLeafB = unpackedLeafsB[i];
     auto unpackedLeafBSize = unpackedLeafB->getType()->getScalarSizeInBits();
-    const auto partialProdSize =
-        unsigned(18 + std::ceil(std::log2(i + 1 + endsOfChain.size())));
-    if (unpackedLeafBSize < partialProdSize) {
-      unpackedLeafB = builder.CreateSExt(
-          unpackedLeafB, IntegerType::get(context, partialProdSize));
-    } else if (unpackedLeafBSize > partialProdSize) {
-      unpackedLeafB = builder.CreateTrunc(
-          unpackedLeafB, IntegerType::get(context, partialProdSize));
+    if (unpackedLeafBSize < rootBSize) {
+      unpackedLeafB = builder.CreateSExt(unpackedLeafB,
+                                         IntegerType::get(context, rootBSize));
+    } else if (unpackedLeafBSize > rootBSize) {
+      unpackedLeafB = builder.CreateTrunc(unpackedLeafB,
+                                          IntegerType::get(context, rootBSize));
     }
 
-    if (sumB->getType()->getScalarSizeInBits() < partialProdSize)
-      sumB =
-          builder.CreateSExt(sumB, IntegerType::get(context, partialProdSize));
     sumB = builder.CreateAdd(sumB, unpackedLeafB);
   }
+  sumA = builder.CreateTrunc(
+      sumA, IntegerType::get(context,
+                             treeA.outInst->getType()->getScalarSizeInBits()));
+  sumB = builder.CreateTrunc(
+      sumB, IntegerType::get(context,
+                             treeB.outInst->getType()->getScalarSizeInBits()));
   // 3. replaceAllUsesWith sumA and sumB
-  const auto rootASize = treeA.outInst->getType()->getScalarSizeInBits();
-  if (rootASize < sumA->getType()->getScalarSizeInBits())
-    sumA = builder.CreateTrunc(sumA, IntegerType::get(context, rootASize));
-  else if (rootASize > sumA->getType()->getScalarSizeInBits())
-    sumA = builder.CreateSExt(sumA, IntegerType::get(context, rootASize));
   treeA.outInst->replaceAllUsesWith(sumA);
-  const auto rootBSize = treeB.outInst->getType()->getScalarSizeInBits();
-  if (rootBSize < sumB->getType()->getScalarSizeInBits())
-    sumB = builder.CreateTrunc(sumB, IntegerType::get(context, rootBSize));
-  else if (rootBSize > sumB->getType()->getScalarSizeInBits())
-    sumB = builder.CreateSExt(sumB, IntegerType::get(context, rootBSize));
   treeB.outInst->replaceAllUsesWith(sumB);
 
   auto rootAName = treeA.outInst->getName();

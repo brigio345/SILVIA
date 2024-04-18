@@ -25,11 +25,6 @@ struct SILVIA : public BasicBlockPass {
     Instruction *outInst;
   };
 
-  struct DotProdTree {
-    SILVIA::Candidate candidate;
-    SmallVector<Instruction *, 8> addInternal;
-  };
-
   virtual bool runOnBasicBlock(BasicBlock &BB);
 
   void getAnalysisUsage(AnalysisUsage &AU) const {

@@ -16,6 +16,11 @@ struct SILVIAMuladd : public SILVIA {
   static char ID;
   SILVIAMuladd() : SILVIA(ID) {}
 
+  struct DotProdTree {
+    SILVIA::Candidate candidate;
+    SmallVector<Instruction *, 8> addInternal;
+  };
+
   bool runOnBasicBlock(BasicBlock &BB) override;
 
   std::list<SILVIA::Candidate> getSIMDableInstructions(BasicBlock &BB) override;
@@ -37,7 +42,7 @@ static RegisterPass<SILVIAMuladd> X("silvia-muladd",
                                     false /* Only looks at CFG */,
                                     true /* Transformation Pass */);
 
-bool getDotProdTree(Instruction *addRoot, SILVIA::DotProdTree &tree) {
+bool getDotProdTree(Instruction *addRoot, SILVIAMuladd::DotProdTree &tree) {
   if (addRoot->getOpcode() != Instruction::Add)
     return false;
 
@@ -89,7 +94,7 @@ Value *getUnextendedValue(Value *V) {
 
 std::list<SILVIA::Candidate>
 SILVIAMuladd::getSIMDableInstructions(BasicBlock &BB) {
-  SmallVector<SILVIA::DotProdTree, 8> trees;
+  SmallVector<SILVIAMuladd::DotProdTree, 8> trees;
   // Iterate in reverse order to avoid collecting subset trees.
   for (auto II = BB.end(), IB = BB.begin(); II != IB; --II) {
     Instruction *I = II;
@@ -109,7 +114,7 @@ SILVIAMuladd::getSIMDableInstructions(BasicBlock &BB) {
       if (subset)
         continue;
 
-      SILVIA::DotProdTree tree;
+      SILVIAMuladd::DotProdTree tree;
       if (getDotProdTree(I, tree)) {
         auto valid = false;
         for (auto inInst : tree.candidate.inInsts) {

@@ -58,7 +58,7 @@ SILVIAAdd::getSIMDableInstructions(BasicBlock &BB) {
       continue;
     if (I.getType()->getScalarSizeInBits() <= addMaxWidth) {
       SILVIA::Candidate candidate;
-      candidate.inInsts.push_back(&I);
+      candidate.inVals.push_back(&I);
       candidate.outInst = &I;
       candidateInsts.push_back(candidate);
     }
@@ -90,15 +90,16 @@ void SILVIAAdd::replaceInstsWithSIMDCall(
   for (unsigned i = 0; i < instTuple.size(); ++i) {
     retName = retName + ((retName == "") ? "" : "_") +
               instTuple[i].outInst->getName().str();
-    for (unsigned j = 0; j < instTuple[i].inInsts[0]->getNumOperands(); ++j) {
-      auto operand = instTuple[i].inInsts[0]->getOperand(j);
+    auto addInst = cast<Instruction>(instTuple[i].inVals[0]);
+    for (unsigned j = 0; j < addInst->getNumOperands(); ++j) {
+      auto operand = addInst->getOperand(j);
 
       auto arg = ((operand->getType()->getScalarSizeInBits() < dataBitWidth)
                       ? builder.CreateZExt(
                             operand, IntegerType::get(context, dataBitWidth),
                             operand->getName() + "_zext")
                       : operand);
-      args[i * instTuple[i].inInsts[0]->getNumOperands() + j] = arg;
+      args[i * addInst->getNumOperands() + j] = arg;
     }
   }
 

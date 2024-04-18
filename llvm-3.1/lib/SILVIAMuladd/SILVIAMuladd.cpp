@@ -66,7 +66,7 @@ bool getDotProdTree(Instruction *addRoot, SILVIAMuladd::DotProdTree &tree) {
     // TODO: One of the leafs can be an add (to be connected to PCIN).
     switch (op->getOpcode()) {
     case Instruction::Mul:
-      tree.candidate.inInsts.push_back(op);
+      tree.candidate.inVals.push_back(op);
       break;
     case Instruction::Add:
       if (!getDotProdTree(op, tree))
@@ -117,12 +117,12 @@ SILVIAMuladd::getSIMDableInstructions(BasicBlock &BB) {
       SILVIAMuladd::DotProdTree tree;
       if (getDotProdTree(I, tree)) {
         auto valid = false;
-        for (auto inInst : tree.candidate.inInsts) {
-
-          valid = ((getUnextendedValue(inInst->getOperand(0))
+        for (auto inVal : tree.candidate.inVals) {
+          auto leafInst = cast<Instruction>(inVal);
+          valid = ((getUnextendedValue(leafInst->getOperand(0))
                         ->getType()
                         ->getScalarSizeInBits() <= 8) &&
-                   ((getUnextendedValue(inInst->getOperand(1))
+                   ((getUnextendedValue(leafInst->getOperand(1))
                          ->getType()
                          ->getScalarSizeInBits() <= 8)));
           if (!valid)
@@ -146,12 +146,20 @@ bool SILVIAMuladd::isCandidateCompatibleWithTuple(
   if (tuple.size() < 1)
     return true;
 
-  for (auto mulLeafA : candidate.inInsts) {
-    auto opA0 = getUnextendedValue(dyn_cast<Instruction>(mulLeafA->getOperand(0)));
-    auto opA1 = getUnextendedValue(dyn_cast<Instruction>(mulLeafA->getOperand(1)));
-    for (auto mulLeafB : tuple[0].inInsts) {
-      auto opB0 = getUnextendedValue(dyn_cast<Instruction>(mulLeafB->getOperand(0)));
-      auto opB1 = getUnextendedValue(dyn_cast<Instruction>(mulLeafB->getOperand(1)));
+  for (auto mulLeafA : candidate.inVals) {
+    auto mulLeafInstA = cast<Instruction>(mulLeafA);
+    // TODO: Check if the dyn_casts do not return nullptr.
+    auto opA0 =
+        getUnextendedValue(dyn_cast<Instruction>(mulLeafInstA->getOperand(0)));
+    auto opA1 =
+        getUnextendedValue(dyn_cast<Instruction>(mulLeafInstA->getOperand(1)));
+    for (auto mulLeafB : tuple[0].inVals) {
+      auto mulLeafInstB = cast<Instruction>(mulLeafB);
+      // TODO: Check if the dyn_casts do not return nullptr.
+      auto opB0 = getUnextendedValue(
+          dyn_cast<Instruction>(mulLeafInstB->getOperand(0)));
+      auto opB1 = getUnextendedValue(
+          dyn_cast<Instruction>(mulLeafInstB->getOperand(1)));
 
       if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) || (opA1 == opB1))
         return true;
@@ -176,13 +184,13 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   SmallVector<Instruction *, 8> unpackedLeafsA;
   SmallVector<Instruction *, 8> unpackedLeafsB;
 
-  for (auto mulLeaf : treeB.inInsts)
+  for (auto mulLeaf : treeB.inVals)
     unpackedLeafsB.push_back(cast<Instruction>(mulLeaf));
 
   auto chainLenght = 0;
   Value *P = ConstantInt::get(IntegerType::get(context, 48), 0);
   SmallVector<Value *, 4> endsOfChain;
-  for (auto mulLeafA : treeA.inInsts) {
+  for (auto mulLeafA : treeA.inVals) {
     auto packed = false;
     auto mulLeafInstA = cast<Instruction>(mulLeafA);
     auto opA0 = getUnextendedValue(mulLeafInstA->getOperand(0));
@@ -268,7 +276,8 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
     }
 
     if (sumA->getType()->getScalarSizeInBits() < partialProdSize)
-      sumA = builder.CreateSExt(sumA, IntegerType::get(context, partialProdSize));
+      sumA =
+          builder.CreateSExt(sumA, IntegerType::get(context, partialProdSize));
     sumA = builder.CreateAdd(sumA, unpackedLeafA);
   }
 
@@ -286,7 +295,8 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
     }
 
     if (sumB->getType()->getScalarSizeInBits() < partialProdSize)
-      sumB = builder.CreateSExt(sumB, IntegerType::get(context, partialProdSize));
+      sumB =
+          builder.CreateSExt(sumB, IntegerType::get(context, partialProdSize));
     sumB = builder.CreateAdd(sumB, unpackedLeafB);
   }
   // 3. replaceAllUsesWith sumA and sumB

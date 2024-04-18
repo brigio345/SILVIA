@@ -21,7 +21,7 @@ struct SILVIA : public BasicBlockPass {
   SILVIA(char ID) : BasicBlockPass(ID) {}
 
   struct Candidate {
-    SmallVector<Instruction *, 2> inInsts;
+    SmallVector<Value *, 2> inVals;
     Instruction *outInst;
   };
 

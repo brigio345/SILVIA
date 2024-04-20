@@ -1,6 +1,8 @@
 #ifndef VITIS_LIBRARIES_DOT_MAIN_H_
 #define VITIS_LIBRARIES_DOT_MAIN_H_
 
+
+
 #include <cstdint>
 #include <ap_int.h>
 
@@ -26,6 +28,13 @@ constexpr unsigned log2ceil(uint64_t value) {
 
 constexpr unsigned NBIT = 8;
 typedef ap_int<NBIT> din_t;
+
+#ifdef BOOL_INPUTS
+typedef bool __din_t;
+typedef ap_int<NBIT + log2ceil(uint64_t(N))> dout_t;
+#else
+typedef din_t __din_t;
 typedef ap_int<NBIT*2 + log2ceil(uint64_t(N))> dout_t;
+#endif // BOOL_INPUTS
 
 #endif // VITIS_LIBRARIES_DOT_MAIN_H_

@@ -217,7 +217,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   }
 
   auto chainLenght = 0;
-  Value *P = ConstantInt::get(IntegerType::get(context, 48), 0);
+  Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
   SmallVector<Value *, 4> endsOfChain;
   for (auto mulLeafA : unpackedMulsA) {
     auto packed = false;
@@ -234,7 +234,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
           (opA1 == opB1)) {
         if ((chainLenght > 0) && ((chainLenght % 7) == 0)) {
           endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
-          P = ConstantInt::get(IntegerType::get(context, 48), 0);
+          P = ConstantInt::get(IntegerType::get(context, 36), 0);
         }
         // pack mulLeafA and mulLeafB + sum P
         // assign the result to P

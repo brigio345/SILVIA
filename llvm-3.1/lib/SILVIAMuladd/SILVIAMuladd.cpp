@@ -52,6 +52,17 @@ Value *getUnextendedValue(Value *V) {
   return V;
 }
 
+int getExtOpcode(Instruction *I) {
+  for (auto UI = I->use_begin(), UE = I->use_end(); UI != UE; ++UI) {
+    Instruction *user = dyn_cast<Instruction>(*UI);
+    auto userOpcode = user->getOpcode();
+    if ((userOpcode == Instruction::SExt) || (userOpcode == Instruction::ZExt))
+      return userOpcode;
+  }
+
+  return -1;
+}
+
 void getAddTree(Instruction *root, SILVIAMuladd::AddTree &tree) {
   if (root->getOpcode() != Instruction::Add) {
     tree.candidate.inVals.push_back(root);
@@ -245,7 +256,14 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   for (auto mul : unpackedMulsB)
     unpackedLeafsB.push_back(mul);
 
-  auto chainLength = 0;
+  auto extA = getExtOpcode(leavesPacks[0][0]);
+  auto extB = getExtOpcode(leavesPacks[0][1]);
+  for (auto leavesPack : leavesPacks) {
+    if ((getExtOpcode(leavesPack[0]) != extA) ||
+        (getExtOpcode(leavesPack[1]) != extB))
+      return;
+  }
+
   Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
   SmallVector<Value *, 4> endsOfChain;
   for (int dspID = 0; dspID < leavesPacks.size(); ++dspID) {
@@ -279,10 +297,10 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
                                   argOrig->getName() + "_trunc");
         }
       }
-      // When this check is true, it means that precision of the mul
-      // operation is actually less than 8 bits.
-      // The result is the same with both sext and zext since the higher
-      // bits are ignored.
+      // This check evaluates to true when the precision of the mul operation
+      // is actually less or equal to 8 bits.
+      // The result is the same with both sext and zext since the higher bits
+      // are ignored.
       if (args[i]->getType()->getScalarSizeInBits() < argSize) {
         args[i] =
             builder.CreateZExt(args[i], IntegerType::get(context, argSize),
@@ -304,20 +322,34 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
     auto partialProdA = builder.CreateExtractValue(endsOfChain[i], 0);
     auto partialProdB = builder.CreateExtractValue(endsOfChain[i], 1);
     if (partialProdSize > 18) {
-      partialProdA = builder.CreateSExt(
-          partialProdA, IntegerType::get(context, partialProdSize));
-      partialProdB = builder.CreateSExt(
-          partialProdB, IntegerType::get(context, partialProdSize));
+      partialProdA =
+          ((extA == Instruction::SExt)
+               ? builder.CreateSExt(partialProdA,
+                                    IntegerType::get(context, partialProdSize))
+               : builder.CreateZExt(
+                     partialProdA, IntegerType::get(context, partialProdSize)));
+      partialProdB =
+          ((extB == Instruction::SExt)
+               ? builder.CreateSExt(partialProdB,
+                                    IntegerType::get(context, partialProdSize))
+               : builder.CreateZExt(
+                     partialProdB, IntegerType::get(context, partialProdSize)));
     }
     if (!sumA) {
       sumA = partialProdA;
       sumB = partialProdB;
     } else {
       if (sumA->getType()->getScalarSizeInBits() < partialProdSize) {
-        sumA = builder.CreateSExt(sumA,
-                                  IntegerType::get(context, partialProdSize));
-        sumB = builder.CreateSExt(sumB,
-                                  IntegerType::get(context, partialProdSize));
+        sumA = ((extA == Instruction::SExt)
+                    ? builder.CreateSExt(
+                          sumA, IntegerType::get(context, partialProdSize))
+                    : builder.CreateZExt(
+                          sumA, IntegerType::get(context, partialProdSize)));
+        sumB = ((extB == Instruction::SExt)
+                    ? builder.CreateSExt(
+                          sumB, IntegerType::get(context, partialProdSize))
+                    : builder.CreateZExt(
+                          sumB, IntegerType::get(context, partialProdSize)));
       }
       sumA = builder.CreateAdd(sumA, partialProdA);
       sumB = builder.CreateAdd(sumB, partialProdB);
@@ -327,22 +359,34 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   // TODO: Maybe the partial sums should have higher bitwidth to reduce
   // overflow risk with signed numbers.
   const auto rootASize = treeA.outInst->getType()->getScalarSizeInBits();
-  if (rootASize < sumA->getType()->getScalarSizeInBits())
+  if (rootASize < sumA->getType()->getScalarSizeInBits()) {
     sumA = builder.CreateTrunc(sumA, IntegerType::get(context, rootASize));
-  else if (rootASize > sumA->getType()->getScalarSizeInBits())
-    sumA = builder.CreateSExt(sumA, IntegerType::get(context, rootASize));
+  } else if (rootASize > sumA->getType()->getScalarSizeInBits()) {
+    sumA =
+        ((extA == Instruction::SExt)
+             ? builder.CreateSExt(sumA, IntegerType::get(context, rootASize))
+             : builder.CreateZExt(sumA, IntegerType::get(context, rootASize)));
+  }
   const auto rootBSize = treeB.outInst->getType()->getScalarSizeInBits();
-  if (rootBSize < sumB->getType()->getScalarSizeInBits())
+  if (rootBSize < sumB->getType()->getScalarSizeInBits()) {
     sumB = builder.CreateTrunc(sumB, IntegerType::get(context, rootBSize));
-  else if (rootBSize > sumB->getType()->getScalarSizeInBits())
-    sumB = builder.CreateSExt(sumB, IntegerType::get(context, rootBSize));
+  } else if (rootBSize > sumB->getType()->getScalarSizeInBits()) {
+    sumB =
+        ((extB == Instruction::SExt)
+             ? builder.CreateSExt(sumB, IntegerType::get(context, rootBSize))
+             : builder.CreateZExt(sumB, IntegerType::get(context, rootBSize)));
+  }
 
   for (auto i = 0; i < unpackedLeafsA.size(); ++i) {
     Value *unpackedLeafA = unpackedLeafsA[i];
     auto unpackedLeafASize = unpackedLeafA->getType()->getScalarSizeInBits();
     if (unpackedLeafASize < rootASize) {
-      unpackedLeafA = builder.CreateSExt(unpackedLeafA,
-                                         IntegerType::get(context, rootASize));
+      unpackedLeafA =
+          ((extA == Instruction::SExt)
+               ? builder.CreateSExt(unpackedLeafA,
+                                    IntegerType::get(context, rootASize))
+               : builder.CreateZExt(unpackedLeafA,
+                                    IntegerType::get(context, rootASize)));
     } else if (unpackedLeafASize > rootASize) {
       unpackedLeafA = builder.CreateTrunc(unpackedLeafA,
                                           IntegerType::get(context, rootASize));
@@ -355,8 +399,12 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
     Value *unpackedLeafB = unpackedLeafsB[i];
     auto unpackedLeafBSize = unpackedLeafB->getType()->getScalarSizeInBits();
     if (unpackedLeafBSize < rootBSize) {
-      unpackedLeafB = builder.CreateSExt(unpackedLeafB,
-                                         IntegerType::get(context, rootBSize));
+      unpackedLeafB =
+          ((extB == Instruction::SExt)
+               ? builder.CreateSExt(unpackedLeafB,
+                                    IntegerType::get(context, rootBSize))
+               : builder.CreateZExt(unpackedLeafB,
+                                    IntegerType::get(context, rootBSize)));
     } else if (unpackedLeafBSize > rootBSize) {
       unpackedLeafB = builder.CreateTrunc(unpackedLeafB,
                                           IntegerType::get(context, rootBSize));

@@ -189,31 +189,31 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   for (auto leaf : treeA.inVals) {
     auto leafInst = dyn_cast<Instruction>(leaf);
 
-    if ((!leafInst) || (leafInst->getOpcode() != Instruction::Mul) ||
+    if ((leafInst) && (leafInst->getOpcode() == Instruction::Mul) &&
         ((getUnextendedValue(leafInst->getOperand(0))
               ->getType()
-              ->getScalarSizeInBits() > 8) ||
+              ->getScalarSizeInBits() <= 8) &&
          (getUnextendedValue(leafInst->getOperand(1))
               ->getType()
-              ->getScalarSizeInBits() > 8)))
-      unpackedLeafsA.push_back(leaf);
-    else
+              ->getScalarSizeInBits() <= 8)))
       unpackedMulsA.push_back(leafInst);
+    else
+      unpackedLeafsA.push_back(leaf);
   }
 
   for (auto leaf : treeB.inVals) {
     auto leafInst = dyn_cast<Instruction>(leaf);
 
-    if ((!leafInst) || (leafInst->getOpcode() != Instruction::Mul) ||
+    if ((leafInst) && (leafInst->getOpcode() == Instruction::Mul) &&
         ((getUnextendedValue(leafInst->getOperand(0))
               ->getType()
-              ->getScalarSizeInBits() > 8) ||
+              ->getScalarSizeInBits() <= 8) &&
          (getUnextendedValue(leafInst->getOperand(1))
               ->getType()
-              ->getScalarSizeInBits() > 8)))
-      unpackedLeafsB.push_back(leaf);
-    else
+              ->getScalarSizeInBits() <= 8)))
       unpackedMulsB.push_back(leafInst);
+    else
+      unpackedLeafsB.push_back(leaf);
   }
 
   auto chainLenght = 0;

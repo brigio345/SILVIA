@@ -216,7 +216,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       unpackedLeafsB.push_back(leaf);
   }
 
-  auto chainLenght = 0;
+  auto chainLength = 0;
   Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
   SmallVector<Value *, 4> endsOfChain;
   for (auto mulLeafA : unpackedMulsA) {
@@ -232,7 +232,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
 
       if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) ||
           (opA1 == opB1)) {
-        if ((chainLenght > 0) && ((chainLenght % 7) == 0)) {
+        if ((chainLength > 0) && ((chainLength % 7) == 0)) {
           endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
           P = ConstantInt::get(IntegerType::get(context, 36), 0);
         }
@@ -263,7 +263,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
         }
         P = builder.CreateCall(MulAdd, args,
                                mulLeafA->getName() + "_" + mulLeafB->getName());
-        chainLenght++;
+        chainLength++;
         packed = true;
         unpackedMulsB.erase(MI);
         break;

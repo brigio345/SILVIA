@@ -221,9 +221,8 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   SmallVector<Value *, 4> endsOfChain;
   for (auto mulLeafA : unpackedMulsA) {
     auto packed = false;
-    auto mulLeafInstA = cast<Instruction>(mulLeafA);
-    auto opA0 = mulLeafInstA->getOperand(0);
-    auto opA1 = mulLeafInstA->getOperand(1);
+    auto opA0 = mulLeafA->getOperand(0);
+    auto opA1 = mulLeafA->getOperand(1);
     for (auto MI = unpackedMulsB.begin(), ME = unpackedMulsB.end(); MI != ME;
          ++MI) {
       auto mulLeafB = *MI;
@@ -274,7 +273,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       }
     }
     if (!packed)
-      unpackedLeafsA.push_back(mulLeafInstA);
+      unpackedLeafsA.push_back(mulLeafA);
   }
 
   for (auto mul : unpackedMulsB)

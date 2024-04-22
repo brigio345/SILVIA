@@ -242,23 +242,27 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
         Value *B = (((opB0 != opA0) && (opB0 != opA1)) ? opB0 : opB1);
         Value *D = (((opA0 == opB0) || (opA0 == opB1)) ? opA0 : opA1);
         Value *args[4] = {A, B, D, P};
+        auto MulAddTy = cast<FunctionType>(
+            cast<PointerType>(MulAdd->getType())->getElementType());
         for (auto i = 0; i < 3; ++i) {
-          if (args[i]->getType()->getScalarSizeInBits() > 8) {
-	    auto argOrig = args[i];
+          auto argSize = MulAddTy->getParamType(i)->getScalarSizeInBits();
+          if (args[i]->getType()->getScalarSizeInBits() > argSize) {
+            auto argOrig = args[i];
             args[i] = getUnextendedValue(args[i]);
-            if (args[i]->getType()->getScalarSizeInBits() < 8) {
-              args[i] =
-                  builder.CreateTrunc(argOrig, IntegerType::get(context, 8),
-                                      argOrig->getName() + "_trunc");
+            if (args[i]->getType()->getScalarSizeInBits() < argSize) {
+              args[i] = builder.CreateTrunc(argOrig,
+                                            IntegerType::get(context, argSize),
+                                            argOrig->getName() + "_trunc");
             }
           }
           // When this check is true, it means that precision of the mul
           // operation is actually less than 8 bits.
           // The result is the same with both sext and zext since the higher
           // bits are ignored.
-          if (args[i]->getType()->getScalarSizeInBits() < 8) {
-            args[i] = builder.CreateZExt(args[i], IntegerType::get(context, 8),
-                                         args[i]->getName() + "_zext");
+          if (args[i]->getType()->getScalarSizeInBits() < argSize) {
+            args[i] =
+                builder.CreateZExt(args[i], IntegerType::get(context, argSize),
+                                   args[i]->getName() + "_zext");
           }
         }
         P = builder.CreateCall(MulAdd, args,

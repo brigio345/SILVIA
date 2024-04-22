@@ -4,23 +4,21 @@ target triple = "fpga64-xilinx-none"
 
 @empty_0 = internal unnamed_addr constant [1 x i8] zeroinitializer
 
-define internal fastcc i36 @_simd_muladd_2(i8 %a_val, i8 %d_val, i8 %b_val, i36 %PCIN_val) nounwind readnone noinline {
+define internal fastcc i36 @_simd_muladd_2(i9 %a_val, i9 %d_val, i9 %b_val, i36 %PCIN_val) nounwind readnone noinline {
 entry:
   call void (...)* @_ssdm_op_SpecPipeline(i32 1, i32 0, i32 0, i32 0, [1 x i8]* @empty_0)
   call void (...)* @_ssdm_op_SpecLatency(i64 2, i64 2, [1 x i8]* @empty_0)
   %PCIN_val_read = call i36 @_ssdm_op_Read.ap_auto.i36(i36 %PCIN_val) nounwind, !bitwidth !1552
-  %b_val_read = call i8 @_ssdm_op_Read.ap_auto.i8(i8 %b_val) nounwind, !bitwidth !1548
-  %d_val_read = call i8 @_ssdm_op_Read.ap_auto.i8(i8 %d_val) nounwind, !bitwidth !1548
-  %a_val_read = call i8 @_ssdm_op_Read.ap_auto.i8(i8 %a_val) nounwind, !bitwidth !1548
-  %A = call i26 @_ssdm_op_BitConcatenate.i26.i8.i18(i8 %a_val_read, i18 0), !bitwidth !1639
-  %sext_ln25 = sext i26 %A to i27, !bitwidth !1644
-  %sext_ln25_1 = sext i8 %d_val_read to i27, !bitwidth !1644
-  %add_ln25 = add nsw i27 %sext_ln25, %sext_ln25_1, !bitwidth !1644
-  %sext_ln25_2 = sext i27 %add_ln25 to i35, !bitwidth !1646
-  %sext_ln25_3 = sext i8 %b_val_read to i35, !bitwidth !1646
-  %mul_ln25 = mul i35 %sext_ln25_2, %sext_ln25_3, !bitwidth !1647
-  %sext_ln25_4 = sext i35 %mul_ln25 to i36, !bitwidth !1632
-  %add_ln25_1 = add i36 %sext_ln25_4, %PCIN_val_read, !bitwidth !1552
+  %b_val_read = call i9 @_ssdm_op_Read.ap_auto.i9(i9 %b_val) nounwind, !bitwidth !1548
+  %d_val_read = call i9 @_ssdm_op_Read.ap_auto.i9(i9 %d_val) nounwind, !bitwidth !1548
+  %a_val_read = call i9 @_ssdm_op_Read.ap_auto.i9(i9 %a_val) nounwind, !bitwidth !1548
+  %A = call i27 @_ssdm_op_BitConcatenate.i27.i9.i18(i9 %a_val_read, i18 0), !bitwidth !1644
+  %sext_ln25_1 = sext i9 %d_val_read to i27, !bitwidth !1644
+  %add_ln25 = add nsw i27 %A, %sext_ln25_1, !bitwidth !1644
+  %sext_ln25_2 = sext i27 %add_ln25 to i36, !bitwidth !1647
+  %sext_ln25_3 = sext i9 %b_val_read to i36, !bitwidth !1647
+  %mul_ln25 = mul i36 %sext_ln25_2, %sext_ln25_3, !bitwidth !1647
+  %add_ln25_1 = add i36 %mul_ln25, %PCIN_val_read, !bitwidth !1552
   ret i36 %add_ln25_1, !bitwidth !1599
 }
 
@@ -54,9 +52,9 @@ entry:
   ret i36 %0
 }
 
-define weak i8 @_ssdm_op_Read.ap_auto.i8(i8) {
+define weak i9 @_ssdm_op_Read.ap_auto.i9(i9) {
 entry:
-  ret i8 %0
+  ret i9 %0
 }
 
 define weak i1 @_ssdm_op_BitSelect.i1.i36.i32(i36, i32) nounwind readnone {
@@ -68,13 +66,13 @@ entry:
   ret i1 %empty_9
 }
 
-define weak i26 @_ssdm_op_BitConcatenate.i26.i8.i18(i8, i18) nounwind readnone {
+define weak i27 @_ssdm_op_BitConcatenate.i27.i9.i18(i9, i18) nounwind readnone {
 entry:
-  %empty = zext i8 %0 to i26
-  %empty_10 = zext i18 %1 to i26
-  %empty_11 = shl i26 %empty, 18
-  %empty_12 = or i26 %empty_11, %empty_10
-  ret i26 %empty_12
+  %empty = zext i9 %0 to i27
+  %empty_10 = zext i18 %1 to i27
+  %empty_11 = shl i27 %empty, 18
+  %empty_12 = or i27 %empty_11, %empty_10
+  ret i27 %empty_12
 }
 
 define weak i18 @_ssdm_op_PartSelect.i18.i36.i32.i32(i36, i32, i32) nounwind readnone {
@@ -86,15 +84,12 @@ entry:
 
 declare i36 @llvm.part.select.i36(i36, i32, i32) nounwind readnone
 
-!1548 = metadata !{i32 8, i32 8, i32 0, i32 2}
+!1548 = metadata !{i32 9, i32 9, i32 0, i32 2}
 !1552 = metadata !{i32 36, i32 36, i32 0, i32 2}
 !1561 = metadata !{i32 36, i32 36, i32 0, i32 2}
 !1599 = metadata !{i32 0, i32 0, i32 0, i32 2}
 !1600 = metadata !{i32 18, i32 18, i32 0, i32 2}
-!1632 = metadata !{i32 36, i32 36, i32 0, i32 1}
-!1639 = metadata !{i32 26, i32 26, i32 0, i32 2}
 !1644 = metadata !{i32 27, i32 27, i32 0, i32 1}
-!1646 = metadata !{i32 35, i32 35, i32 0, i32 1}
-!1647 = metadata !{i32 35, i32 35, i32 0, i32 2}
+!1647 = metadata !{i32 36, i32 36, i32 0, i32 2}
 !1652 = metadata !{i32 1, i32 1, i32 0, i32 2}
 !1653 = metadata !{i32 18, i32 18, i32 0, i32 0}

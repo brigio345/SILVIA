@@ -216,9 +216,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       unpackedLeafsB.push_back(leaf);
   }
 
-  auto chainLength = 0;
-  Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
-  SmallVector<Value *, 4> endsOfChain;
+  SmallVector<SmallVector<Instruction *, 2>, 8> leavesPacks;
   for (auto mulLeafA : unpackedMulsA) {
     auto packed = false;
     auto opA0 = mulLeafA->getOperand(0);
@@ -231,42 +229,10 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
 
       if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) ||
           (opA1 == opB1)) {
-        if ((chainLength > 0) && ((chainLength % 7) == 0)) {
-          endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
-          P = ConstantInt::get(IntegerType::get(context, 36), 0);
-        }
-        // pack mulLeafA and mulLeafB + sum P
-        // assign the result to P
-        Value *A = (((opA0 != opB0) && (opA0 != opB1)) ? opA0 : opA1);
-        Value *B = (((opB0 != opA0) && (opB0 != opA1)) ? opB0 : opB1);
-        Value *D = (((opA0 == opB0) || (opA0 == opB1)) ? opA0 : opA1);
-        Value *args[4] = {A, B, D, P};
-        auto MulAddTy = cast<FunctionType>(
-            cast<PointerType>(MulAdd->getType())->getElementType());
-        for (auto i = 0; i < 3; ++i) {
-          auto argSize = MulAddTy->getParamType(i)->getScalarSizeInBits();
-          if (args[i]->getType()->getScalarSizeInBits() > argSize) {
-            auto argOrig = args[i];
-            args[i] = getUnextendedValue(args[i]);
-            if (args[i]->getType()->getScalarSizeInBits() < argSize) {
-              args[i] = builder.CreateTrunc(argOrig,
-                                            IntegerType::get(context, argSize),
-                                            argOrig->getName() + "_trunc");
-            }
-          }
-          // When this check is true, it means that precision of the mul
-          // operation is actually less than 8 bits.
-          // The result is the same with both sext and zext since the higher
-          // bits are ignored.
-          if (args[i]->getType()->getScalarSizeInBits() < argSize) {
-            args[i] =
-                builder.CreateZExt(args[i], IntegerType::get(context, argSize),
-                                   args[i]->getName() + "_zext");
-          }
-        }
-        P = builder.CreateCall(MulAdd, args,
-                               mulLeafA->getName() + "_" + mulLeafB->getName());
-        chainLength++;
+        SmallVector<Instruction *, 2> pack;
+        pack.push_back(mulLeafA);
+        pack.push_back(mulLeafB);
+        leavesPacks.push_back(pack);
         packed = true;
         unpackedMulsB.erase(MI);
         break;
@@ -278,6 +244,54 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
 
   for (auto mul : unpackedMulsB)
     unpackedLeafsB.push_back(mul);
+
+  auto chainLength = 0;
+  Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
+  SmallVector<Value *, 4> endsOfChain;
+  for (int dspID = 0; dspID < leavesPacks.size(); ++dspID) {
+    auto mulLeafA = leavesPacks[dspID][0];
+    auto mulLeafB = leavesPacks[dspID][1];
+    auto opA0 = mulLeafA->getOperand(0);
+    auto opA1 = mulLeafA->getOperand(1);
+    auto opB0 = mulLeafB->getOperand(0);
+    auto opB1 = mulLeafB->getOperand(1);
+
+    if ((dspID > 0) && ((dspID % 7) == 0)) {
+      endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
+      P = ConstantInt::get(IntegerType::get(context, 36), 0);
+    }
+    // pack mulLeafA and mulLeafB + sum P
+    // assign the result to P
+    Value *A = (((opA0 != opB0) && (opA0 != opB1)) ? opA0 : opA1);
+    Value *B = (((opB0 != opA0) && (opB0 != opA1)) ? opB0 : opB1);
+    Value *D = (((opA0 == opB0) || (opA0 == opB1)) ? opA0 : opA1);
+    Value *args[4] = {A, B, D, P};
+    auto MulAddTy = cast<FunctionType>(
+        cast<PointerType>(MulAdd->getType())->getElementType());
+    for (auto i = 0; i < 3; ++i) {
+      auto argSize = MulAddTy->getParamType(i)->getScalarSizeInBits();
+      if (args[i]->getType()->getScalarSizeInBits() > argSize) {
+        auto argOrig = args[i];
+        args[i] = getUnextendedValue(args[i]);
+        if (args[i]->getType()->getScalarSizeInBits() < argSize) {
+          args[i] =
+              builder.CreateTrunc(argOrig, IntegerType::get(context, argSize),
+                                  argOrig->getName() + "_trunc");
+        }
+      }
+      // When this check is true, it means that precision of the mul
+      // operation is actually less than 8 bits.
+      // The result is the same with both sext and zext since the higher
+      // bits are ignored.
+      if (args[i]->getType()->getScalarSizeInBits() < argSize) {
+        args[i] =
+            builder.CreateZExt(args[i], IntegerType::get(context, argSize),
+                               args[i]->getName() + "_zext");
+      }
+    }
+    P = builder.CreateCall(MulAdd, args,
+                           mulLeafA->getName() + "_" + mulLeafB->getName());
+  }
 
   // 1. call extractProds from P
   endsOfChain.push_back(builder.CreateCall(ExtractProds, P));

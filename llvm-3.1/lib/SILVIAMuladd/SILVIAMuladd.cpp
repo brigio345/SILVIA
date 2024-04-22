@@ -165,12 +165,19 @@ bool SILVIAMuladd::isCandidateCompatibleWithTuple(
         (opA1->getType()->getScalarSizeInBits() > 8))
       continue;
     for (auto mulLeafB : tuple[0].inVals) {
-      auto mulLeafInstB = cast<Instruction>(mulLeafB);
+      auto mulLeafInstB = dyn_cast<Instruction>(mulLeafB);
+
+      if ((!mulLeafInstB) || (mulLeafInstB->getOpcode() != Instruction::Mul))
+        continue;
       // TODO: Check if the dyn_casts do not return nullptr.
       auto opB0 = getUnextendedValue(
           dyn_cast<Instruction>(mulLeafInstB->getOperand(0)));
       auto opB1 = getUnextendedValue(
           dyn_cast<Instruction>(mulLeafInstB->getOperand(1)));
+
+      if ((opB0->getType()->getScalarSizeInBits() > 8) ||
+          (opB1->getType()->getScalarSizeInBits() > 8))
+        continue;
 
       if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) || (opA1 == opB1))
         return true;

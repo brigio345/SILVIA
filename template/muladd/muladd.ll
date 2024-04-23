@@ -22,7 +22,7 @@ entry:
   ret i36 %add_ln25_1, !bitwidth !1599
 }
 
-define internal fastcc { i18, i18 } @_simd_muladd_extract_2(i36 %M_val) nounwind readnone noinline {
+define internal fastcc { i18, i18 } @_simd_muladd_signed_extract_2(i36 %M_val) nounwind readnone noinline {
 entry:
   call void (...)* @_ssdm_op_SpecPipeline(i32 1, i32 0, i32 0, i32 0, [1 x i8]* @empty_0)
   call void (...)* @_ssdm_op_SpecLatency(i64 0, i64 0, [1 x i8]* @empty_0)
@@ -33,6 +33,18 @@ entry:
   %trunc_ln = call i18 @_ssdm_op_PartSelect.i18.i36.i32.i32(i36 %M_val_read, i32 18, i32 35), !bitwidth !1600
   %add_ln14 = add i18 %trunc_ln, %zext_ln14, !bitwidth !1600
   %mrv = insertvalue { i18, i18 } undef, i18 %add_ln14, 0, !bitwidth !1599
+  %mrv_1 = insertvalue { i18, i18 } %mrv, i18 %trunc_ln13, 1, !bitwidth !1599
+  ret { i18, i18 } %mrv_1, !bitwidth !1599
+}
+
+define internal fastcc { i18, i18 } @_simd_muladd_unsigned_extract_2(i36 %M_val) nounwind readnone noinline {
+entry:
+  call void (...)* @_ssdm_op_SpecPipeline(i32 1, i32 0, i32 0, i32 0, [1 x i8]* @empty_0)
+  call void (...)* @_ssdm_op_SpecLatency(i64 0, i64 0, [1 x i8]* @empty_0)
+  %M_val_read = call i36 @_ssdm_op_Read.ap_auto.i36(i36 %M_val) nounwind, !bitwidth !1561
+  %trunc_ln13 = trunc i36 %M_val_read to i18, !bitwidth !1600
+  %trunc_ln = call i18 @_ssdm_op_PartSelect.i18.i36.i32.i32(i36 %M_val_read, i32 18, i32 35), !bitwidth !1600
+  %mrv = insertvalue { i18, i18 } undef, i18 %trunc_ln, 0, !bitwidth !1599
   %mrv_1 = insertvalue { i18, i18 } %mrv, i18 %trunc_ln13, 1, !bitwidth !1599
   ret { i18, i18 } %mrv_1, !bitwidth !1599
 }

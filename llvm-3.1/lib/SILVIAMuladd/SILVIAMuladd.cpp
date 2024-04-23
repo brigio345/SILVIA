@@ -33,7 +33,8 @@ struct SILVIAMuladd : public SILVIA {
                                 LLVMContext &context) override;
 
   Function *MulAdd;
-  Function *ExtractProds;
+  Function *ExtractProdsSign;
+  Function *ExtractProdsUnsign;
 };
 
 char SILVIAMuladd::ID = 0;
@@ -310,6 +311,8 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
     unpackedLeafsB.push_back(mul);
 
   const auto maxChainLength = getMaxChainLength(leavesPacks, extB);
+  auto ExtractProds =
+      ((extB == Instruction::SExt) ? ExtractProdsSign : ExtractProdsUnsign);
   Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
   SmallVector<Value *, 4> endsOfChain;
   for (int dspID = 0; dspID < leavesPacks.size(); ++dspID) {
@@ -475,8 +478,10 @@ bool SILVIAMuladd::runOnBasicBlock(BasicBlock &BB) {
   MulAdd = module->getFunction("_simd_muladd_2");
   assert(MulAdd && "SIMD function not found");
 
-  ExtractProds = module->getFunction("_simd_muladd_extract_2");
-  assert(ExtractProds && "SIMD extract function not found");
+  ExtractProdsSign = module->getFunction("_simd_muladd_signed_extract_2");
+  ExtractProdsUnsign = module->getFunction("_simd_muladd_unsigned_extract_2");
+  assert((ExtractProdsSign && ExtractProdsUnsign) &&
+         "SIMD extract function not found");
 
   return SILVIA::runOnBasicBlock(BB);
 }

@@ -381,7 +381,8 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
     if (instTuple.size() < 2)
       continue;
 
-    replaceInstsWithSIMDCall(instTuple, firstUse, context);
+    auto insertBefore = (firstUse ? firstUse : BB.getTerminator());
+    replaceInstsWithSIMDCall(instTuple, insertBefore, context);
     modified = true;
   }
 

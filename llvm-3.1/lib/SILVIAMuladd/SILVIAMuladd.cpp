@@ -234,7 +234,13 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       unpackedLeafsB.push_back(leaf);
   }
 
-  SmallVector<SmallVector<Instruction *, 2>, 8> leavesPacks;
+  struct LeavesPack {
+    SmallVector<Value *, 3> leaves;
+    std::string name;
+  };
+  SmallVector<LeavesPack, 8> leavesPacks;
+  int extA;
+  int extB;
   for (auto mulLeafA : unpackedMulsA) {
     auto packed = false;
     auto opA0 = mulLeafA->getOperand(0);
@@ -247,12 +253,25 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
 
       if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) ||
           (opA1 == opB1)) {
-        SmallVector<Instruction *, 2> pack;
-        pack.push_back(mulLeafA);
-        pack.push_back(mulLeafB);
+        if (leavesPacks.size() == 0) {
+          extA = getExtOpcode(mulLeafA);
+          extB = getExtOpcode(mulLeafB);
+        } else if ((getExtOpcode(mulLeafA) != extA) ||
+                   (getExtOpcode(mulLeafB) != extB)) {
+          return;
+        }
+
+        LeavesPack pack;
+        pack.leaves.push_back(((opA0 != opB0) && (opA0 != opB1)) ? opA0 : opA1);
+        pack.leaves.push_back(((opB0 != opA0) && (opB0 != opA1)) ? opB0 : opB1);
+        pack.leaves.push_back(((opA0 == opB0) || (opA0 == opB1)) ? opA0 : opA1);
+        pack.name = std::string(mulLeafA->getName()) + "_" +
+                    std::string(mulLeafB->getName());
+
         leavesPacks.push_back(pack);
         packed = true;
         unpackedMulsB.erase(MI);
+
         break;
       }
     }
@@ -263,34 +282,18 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   for (auto mul : unpackedMulsB)
     unpackedLeafsB.push_back(mul);
 
-  auto extA = getExtOpcode(leavesPacks[0][0]);
-  auto extB = getExtOpcode(leavesPacks[0][1]);
-  for (auto leavesPack : leavesPacks) {
-    if ((getExtOpcode(leavesPack[0]) != extA) ||
-        (getExtOpcode(leavesPack[1]) != extB))
-      return;
-  }
-
   Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
   SmallVector<Value *, 4> endsOfChain;
   for (int dspID = 0; dspID < leavesPacks.size(); ++dspID) {
-    auto mulLeafA = leavesPacks[dspID][0];
-    auto mulLeafB = leavesPacks[dspID][1];
-    auto opA0 = mulLeafA->getOperand(0);
-    auto opA1 = mulLeafA->getOperand(1);
-    auto opB0 = mulLeafB->getOperand(0);
-    auto opB1 = mulLeafB->getOperand(1);
-
     if ((dspID > 0) && ((dspID % 7) == 0)) {
       endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
       P = ConstantInt::get(IntegerType::get(context, 36), 0);
     }
     // pack mulLeafA and mulLeafB + sum P
     // assign the result to P
-    Value *A = (((opA0 != opB0) && (opA0 != opB1)) ? opA0 : opA1);
-    Value *B = (((opB0 != opA0) && (opB0 != opA1)) ? opB0 : opB1);
-    Value *D = (((opA0 == opB0) || (opA0 == opB1)) ? opA0 : opA1);
-    Value *args[4] = {A, B, D, P};
+    Value *args[4] = {leavesPacks[dspID].leaves[0],
+                      leavesPacks[dspID].leaves[1],
+                      leavesPacks[dspID].leaves[2], P};
     auto MulAddTy = cast<FunctionType>(
         cast<PointerType>(MulAdd->getType())->getElementType());
     for (auto i = 0; i < 3; ++i) {
@@ -314,8 +317,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
                                args[i]->getName() + "_zext");
       }
     }
-    P = builder.CreateCall(MulAdd, args,
-                           mulLeafA->getName() + "_" + mulLeafB->getName());
+    P = builder.CreateCall(MulAdd, args, leavesPacks[dspID].name);
   }
 
   // 1. call extractProds from P

@@ -42,6 +42,11 @@ static RegisterPass<SILVIAMuladd> X("silvia-muladd",
                                     false /* Only looks at CFG */,
                                     true /* Transformation Pass */);
 
+struct LeavesPack {
+  SmallVector<Value *, 3> leaves;
+  std::string name;
+};
+
 Value *getUnextendedValue(Value *V) {
   if (auto I = dyn_cast<Instruction>(V)) {
     if ((I->getOpcode() == Instruction::SExt) ||
@@ -191,6 +196,32 @@ bool SILVIAMuladd::isTupleFull(SmallVector<SILVIA::Candidate, 4> &tuple) {
   return (tuple.size() == 2);
 }
 
+unsigned getMaxChainLength(const SmallVector<LeavesPack, 8> &leavesPacks,
+                           const int DExt) {
+  unsigned maxSize[3] = {0};
+
+  for (auto leavesPack : leavesPacks) {
+    for (int i = 0; i < 3; ++i) {
+      const auto size = getUnextendedValue(leavesPack.leaves[0])
+                            ->getType()
+                            ->getScalarSizeInBits();
+      if (size > maxSize[i])
+        maxSize[i] = size;
+    }
+  }
+
+  const auto q = 18;
+  const auto m = ((maxSize[0] > maxSize[1]) ? maxSize[0] : maxSize[1]);
+  const auto n = maxSize[2];
+
+  const unsigned N =
+      ((DExt == Instruction::SExt)
+           ? (((1 << (q - 1)) - 1) / float(1 << (m + n - 2)))
+           : (((1 << q) - 1) / float(((1 << m) - 1) * ((1 << n) - 1))));
+
+  return N;
+}
+
 void SILVIAMuladd::replaceInstsWithSIMDCall(
     SmallVector<SILVIA::Candidate, 4> instTuple, Instruction *insertBefore,
     LLVMContext &context) {
@@ -234,10 +265,6 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       unpackedLeafsB.push_back(leaf);
   }
 
-  struct LeavesPack {
-    SmallVector<Value *, 3> leaves;
-    std::string name;
-  };
   SmallVector<LeavesPack, 8> leavesPacks;
   int extA;
   int extB;
@@ -282,10 +309,11 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   for (auto mul : unpackedMulsB)
     unpackedLeafsB.push_back(mul);
 
+  const auto maxChainLength = getMaxChainLength(leavesPacks, extB);
   Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
   SmallVector<Value *, 4> endsOfChain;
   for (int dspID = 0; dspID < leavesPacks.size(); ++dspID) {
-    if ((dspID > 0) && ((dspID % 7) == 0)) {
+    if ((dspID > 0) && ((dspID % maxChainLength) == 0)) {
       endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
       P = ConstantInt::get(IntegerType::get(context, 36), 0);
     }

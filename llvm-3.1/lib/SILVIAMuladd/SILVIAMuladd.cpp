@@ -203,7 +203,7 @@ unsigned getMaxChainLength(const SmallVector<LeavesPack, 8> &leavesPacks,
 
   for (auto leavesPack : leavesPacks) {
     for (int i = 0; i < 3; ++i) {
-      const auto size = getUnextendedValue(leavesPack.leaves[0])
+      const auto size = getUnextendedValue(leavesPack.leaves[i])
                             ->getType()
                             ->getScalarSizeInBits();
       if (size > maxSize[i])

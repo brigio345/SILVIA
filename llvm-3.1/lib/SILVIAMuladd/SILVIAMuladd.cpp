@@ -76,11 +76,20 @@ void getAddTree(Instruction *root, SILVIAMuladd::AddTree &tree) {
   }
 
   for (unsigned i = 0; i < root->getNumOperands(); ++i) {
-    auto op = getUnextendedValue(root->getOperand(i));
+    auto op = root->getOperand(i);
 
     auto opInst = dyn_cast<Instruction>(op);
+    auto hasOneUse = op->hasOneUse();
+    while (hasOneUse && opInst &&
+           ((opInst->getOpcode() == Instruction::SExt) ||
+            (opInst->getOpcode() == Instruction::ZExt))) {
+      op = opInst->getOperand(0);
+      opInst = dyn_cast<Instruction>(op);
 
-    if (!opInst) {
+      hasOneUse &= op->hasOneUse();
+    }
+
+    if ((!hasOneUse) || (!opInst)) {
       tree.candidate.inVals.push_back(op);
       continue;
     }

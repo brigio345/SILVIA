@@ -4,6 +4,7 @@
 #include "llvm/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/IRBuilder.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 
 #include <cassert>
 #include <list>
@@ -42,6 +43,10 @@ static RegisterPass<SILVIAMuladd> X("silvia-muladd",
                                     "Pack muladds to SIMD DSPs",
                                     false /* Only looks at CFG */,
                                     true /* Transformation Pass */);
+
+static cl::opt<bool>
+    SILVIAMuladdInline("silvia-muladd-inline", cl::init(false), cl::Hidden,
+                       cl::desc("Whether to inline the packed operations."));
 
 struct LeavesPack {
   SmallVector<Value *, 3> leaves;
@@ -324,6 +329,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       ((extB == Instruction::SExt) ? ExtractProdsSign : ExtractProdsUnsign);
   Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
   SmallVector<Value *, 4> endsOfChain;
+  SmallVector<Value *, 8> mulAddCalls;
   for (int dspID = 0; dspID < leavesPacks.size(); ++dspID) {
     if ((dspID > 0) && ((dspID % maxChainLength) == 0)) {
       endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
@@ -358,6 +364,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       }
     }
     P = builder.CreateCall(MulAdd, args, leavesPacks[dspID].name);
+    mulAddCalls.push_back(P);
   }
 
   // 1. call extractProds from P
@@ -479,18 +486,49 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
 
   sumA->setName(rootAName);
   sumB->setName(rootBName);
+
+  if (SILVIAMuladdInline) {
+    InlineFunctionInfo IFI;
+    for (auto P : mulAddCalls)
+      InlineFunction(P, IFI);
+    for (auto endOfChain : endsOfChain)
+      InlineFunction(endOfChain, IFI);
+  }
 }
 
 bool SILVIAMuladd::runOnBasicBlock(BasicBlock &BB) {
   // Get the SIMD function
   Module *module = BB.getParent()->getParent();
-  MulAdd = module->getFunction("_simd_muladd_2");
+  MulAdd = module->getFunction(
+      "_simd_muladd" + std::string(SILVIAMuladdInline ? "_inline_" : "_") +
+      "2");
   assert(MulAdd && "SIMD function not found");
 
-  ExtractProdsSign = module->getFunction("_simd_muladd_signed_extract_2");
-  ExtractProdsUnsign = module->getFunction("_simd_muladd_unsigned_extract_2");
+  ExtractProdsSign = module->getFunction(
+      "_simd_muladd_signed_extract" +
+      std::string(SILVIAMuladdInline ? "_inline_" : "_") + "2");
+  ExtractProdsUnsign = module->getFunction(
+      "_simd_muladd_unsigned_extract" +
+      std::string(SILVIAMuladdInline ? "_inline_" : "_") + "2");
   assert((ExtractProdsSign && ExtractProdsUnsign) &&
          "SIMD extract function not found");
 
-  return SILVIA::runOnBasicBlock(BB);
+  auto modified = SILVIA::runOnBasicBlock(BB);
+
+  if (SILVIAMuladdInline && modified) {
+    // InlineFunction may name some instructions with strings containing ".",
+    // resulting in illegal RTL code: replace all "." with "_" characters in
+    // the instruction names.
+    for (auto &I : BB) {
+      std::string name = I.getName().str();
+      size_t pos = name.find('.');
+      while (pos != std::string::npos) {
+        name.replace(pos, 1, "_");
+        pos = name.find('.', pos + 1);
+      }
+      I.setName(name);
+    }
+  }
+
+  return modified;
 }

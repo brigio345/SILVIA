@@ -44,6 +44,11 @@ static RegisterPass<SILVIAMuladd> X("silvia-muladd",
                                     false /* Only looks at CFG */,
                                     true /* Transformation Pass */);
 
+static cl::opt<int>
+    SILVIAMuladdMaxChainLen("silvia-muladd-max-chain-len", cl::init(-1),
+                            cl::Hidden,
+                            cl::desc("The maximum length of a chain of DSPs."));
+
 static cl::opt<bool>
     SILVIAMuladdInline("silvia-muladd-inline", cl::init(false), cl::Hidden,
                        cl::desc("Whether to inline the packed operations."));
@@ -357,7 +362,10 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   for (auto mul : unpackedMulsB)
     toAddB.push_back(mul);
 
-  const auto maxChainLength = getMaxChainLength(leavesPacks, extB);
+  auto maxChainLength = getMaxChainLength(leavesPacks, extB);
+  if ((SILVIAMuladdMaxChainLen > 0) &&
+      (maxChainLength > SILVIAMuladdMaxChainLen))
+    maxChainLength = SILVIAMuladdMaxChainLen;
   auto ExtractProds =
       ((extB == Instruction::SExt) ? ExtractProdsSign : ExtractProdsUnsign);
   Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);

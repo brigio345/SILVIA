@@ -237,6 +237,39 @@ unsigned getMaxChainLength(const SmallVector<LeavesPack, 8> &leavesPacks,
   return N;
 }
 
+Value *buildAddTree(SmallVector<Value *, 8> &addends, int ext,
+                    IRBuilder<> &builder, LLVMContext &context) {
+  if (addends.size() == 0)
+    return nullptr;
+
+  SmallVector<Value *, 8> lowerAddends;
+  for (int i = 0; i < addends.size(); i += 2) {
+    auto A = addends[i];
+    auto B = (((i + 1) < addends.size()) ? addends[i + 1] : nullptr);
+
+    if (!B) {
+      lowerAddends.push_back(A);
+      break;
+    }
+
+    auto ASize = A->getType()->getScalarSizeInBits();
+    auto BSize = B->getType()->getScalarSizeInBits();
+    auto addSize = (((ASize > BSize) ? ASize : BSize) + 1);
+    A = ((ext == Instruction::SExt)
+             ? builder.CreateSExt(A, IntegerType::get(context, addSize))
+             : builder.CreateZExt(A, IntegerType::get(context, addSize)));
+    B = ((ext == Instruction::SExt)
+             ? builder.CreateSExt(B, IntegerType::get(context, addSize))
+             : builder.CreateZExt(B, IntegerType::get(context, addSize)));
+
+    lowerAddends.push_back(builder.CreateAdd(A, B));
+  }
+
+  return ((lowerAddends.size() == 1)
+              ? lowerAddends[0]
+              : buildAddTree(lowerAddends, ext, builder, context));
+}
+
 void SILVIAMuladd::replaceInstsWithSIMDCall(
     SmallVector<SILVIA::Candidate, 4> instTuple, Instruction *insertBefore,
     LLVMContext &context) {
@@ -371,49 +404,21 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
 
   // 2. sum the extracted prods to the unpacked leafs
-  Value *sumA = nullptr;
-  Value *sumB = nullptr;
-  for (auto i = 0; i < endsOfChain.size(); ++i) {
-    const auto partialProdSize = unsigned(18 + std::ceil(std::log2(i + 1)));
-    auto partialProdA = builder.CreateExtractValue(endsOfChain[i], 0);
-    auto partialProdB = builder.CreateExtractValue(endsOfChain[i], 1);
-    if (partialProdSize > 18) {
-      partialProdA =
-          ((extA == Instruction::SExt)
-               ? builder.CreateSExt(partialProdA,
-                                    IntegerType::get(context, partialProdSize))
-               : builder.CreateZExt(
-                     partialProdA, IntegerType::get(context, partialProdSize)));
-      partialProdB =
-          ((extB == Instruction::SExt)
-               ? builder.CreateSExt(partialProdB,
-                                    IntegerType::get(context, partialProdSize))
-               : builder.CreateZExt(
-                     partialProdB, IntegerType::get(context, partialProdSize)));
-    }
-    if (!sumA) {
-      sumA = partialProdA;
-      sumB = partialProdB;
-    } else {
-      if (sumA->getType()->getScalarSizeInBits() < partialProdSize) {
-        sumA = ((extA == Instruction::SExt)
-                    ? builder.CreateSExt(
-                          sumA, IntegerType::get(context, partialProdSize))
-                    : builder.CreateZExt(
-                          sumA, IntegerType::get(context, partialProdSize)));
-        sumB = ((extB == Instruction::SExt)
-                    ? builder.CreateSExt(
-                          sumB, IntegerType::get(context, partialProdSize))
-                    : builder.CreateZExt(
-                          sumB, IntegerType::get(context, partialProdSize)));
-      }
-      sumA = builder.CreateAdd(sumA, partialProdA);
-      sumB = builder.CreateAdd(sumB, partialProdB);
-    }
+  SmallVector<Value *, 8> toAddA;
+  SmallVector<Value *, 8> toAddB;
+  for (auto endOfChain : endsOfChain) {
+    toAddA.push_back(builder.CreateExtractValue(endOfChain, 0));
+    toAddB.push_back(builder.CreateExtractValue(endOfChain, 1));
   }
-  // Sum the unpacked leafs.
-  // TODO: Maybe the partial sums should have higher bitwidth to reduce
-  // overflow risk with signed numbers.
+
+  for (auto unpackedLeaf : unpackedLeafsA)
+    toAddA.push_back(unpackedLeaf);
+  for (auto unpackedLeaf : unpackedLeafsB)
+    toAddB.push_back(unpackedLeaf);
+
+  Value *sumA = buildAddTree(toAddA, extA, builder, context);
+  Value *sumB = buildAddTree(toAddB, extB, builder, context);
+
   const auto rootASize = treeA.outInst->getType()->getScalarSizeInBits();
   if (rootASize < sumA->getType()->getScalarSizeInBits()) {
     sumA = builder.CreateTrunc(sumA, IntegerType::get(context, rootASize));
@@ -433,47 +438,6 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
              : builder.CreateZExt(sumB, IntegerType::get(context, rootBSize)));
   }
 
-  for (auto i = 0; i < unpackedLeafsA.size(); ++i) {
-    Value *unpackedLeafA = unpackedLeafsA[i];
-    auto unpackedLeafASize = unpackedLeafA->getType()->getScalarSizeInBits();
-    if (unpackedLeafASize < rootASize) {
-      unpackedLeafA =
-          ((extA == Instruction::SExt)
-               ? builder.CreateSExt(unpackedLeafA,
-                                    IntegerType::get(context, rootASize))
-               : builder.CreateZExt(unpackedLeafA,
-                                    IntegerType::get(context, rootASize)));
-    } else if (unpackedLeafASize > rootASize) {
-      unpackedLeafA = builder.CreateTrunc(unpackedLeafA,
-                                          IntegerType::get(context, rootASize));
-    }
-
-    sumA = builder.CreateAdd(sumA, unpackedLeafA);
-  }
-
-  for (auto i = 0; i < unpackedLeafsB.size(); ++i) {
-    Value *unpackedLeafB = unpackedLeafsB[i];
-    auto unpackedLeafBSize = unpackedLeafB->getType()->getScalarSizeInBits();
-    if (unpackedLeafBSize < rootBSize) {
-      unpackedLeafB =
-          ((extB == Instruction::SExt)
-               ? builder.CreateSExt(unpackedLeafB,
-                                    IntegerType::get(context, rootBSize))
-               : builder.CreateZExt(unpackedLeafB,
-                                    IntegerType::get(context, rootBSize)));
-    } else if (unpackedLeafBSize > rootBSize) {
-      unpackedLeafB = builder.CreateTrunc(unpackedLeafB,
-                                          IntegerType::get(context, rootBSize));
-    }
-
-    sumB = builder.CreateAdd(sumB, unpackedLeafB);
-  }
-  sumA = builder.CreateTrunc(
-      sumA, IntegerType::get(context,
-                             treeA.outInst->getType()->getScalarSizeInBits()));
-  sumB = builder.CreateTrunc(
-      sumB, IntegerType::get(context,
-                             treeB.outInst->getType()->getScalarSizeInBits()));
   // 3. replaceAllUsesWith sumA and sumB
   treeA.outInst->replaceAllUsesWith(sumA);
   treeB.outInst->replaceAllUsesWith(sumB);

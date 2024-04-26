@@ -278,9 +278,9 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
 
   IRBuilder<> builder(insertBefore);
 
-  SmallVector<Value *, 8> unpackedLeafsA;
+  SmallVector<Value *, 8> toAddA;
   SmallVector<Instruction *, 8> unpackedMulsA;
-  SmallVector<Value *, 8> unpackedLeafsB;
+  SmallVector<Value *, 8> toAddB;
   SmallVector<Instruction *, 8> unpackedMulsB;
 
   for (auto leaf : treeA.inVals) {
@@ -295,7 +295,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
               ->getScalarSizeInBits() <= 8)))
       unpackedMulsA.push_back(leafInst);
     else
-      unpackedLeafsA.push_back(leaf);
+      toAddA.push_back(leaf);
   }
 
   for (auto leaf : treeB.inVals) {
@@ -310,7 +310,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
               ->getScalarSizeInBits() <= 8)))
       unpackedMulsB.push_back(leafInst);
     else
-      unpackedLeafsB.push_back(leaf);
+      toAddB.push_back(leaf);
   }
 
   SmallVector<LeavesPack, 8> leavesPacks;
@@ -351,11 +351,11 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       }
     }
     if (!packed)
-      unpackedLeafsA.push_back(mulLeafA);
+      toAddA.push_back(mulLeafA);
   }
 
   for (auto mul : unpackedMulsB)
-    unpackedLeafsB.push_back(mul);
+    toAddB.push_back(mul);
 
   const auto maxChainLength = getMaxChainLength(leavesPacks, extB);
   auto ExtractProds =
@@ -404,17 +404,10 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
 
   // 2. sum the extracted prods to the unpacked leafs
-  SmallVector<Value *, 8> toAddA;
-  SmallVector<Value *, 8> toAddB;
   for (auto endOfChain : endsOfChain) {
     toAddA.push_back(builder.CreateExtractValue(endOfChain, 0));
     toAddB.push_back(builder.CreateExtractValue(endOfChain, 1));
   }
-
-  for (auto unpackedLeaf : unpackedLeafsA)
-    toAddA.push_back(unpackedLeaf);
-  for (auto unpackedLeaf : unpackedLeafsB)
-    toAddB.push_back(unpackedLeaf);
 
   Value *sumA = buildAddTree(toAddA, extA, builder, context);
   Value *sumB = buildAddTree(toAddB, extB, builder, context);

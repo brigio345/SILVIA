@@ -366,13 +366,15 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   if ((SILVIAMuladdMaxChainLen > 0) &&
       (maxChainLength > SILVIAMuladdMaxChainLen))
     maxChainLength = SILVIAMuladdMaxChainLen;
+  int numChains = std::ceil(leavesPacks.size() / ((float)maxChainLength));
+  int balancedChainLength = std::ceil(leavesPacks.size() / ((float)numChains));
   auto ExtractProds =
       ((extB == Instruction::SExt) ? ExtractProdsSign : ExtractProdsUnsign);
   Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
   SmallVector<Value *, 4> endsOfChain;
   SmallVector<Value *, 8> mulAddCalls;
   for (int dspID = 0; dspID < leavesPacks.size(); ++dspID) {
-    if ((dspID > 0) && ((dspID % maxChainLength) == 0)) {
+    if ((dspID > 0) && ((dspID % balancedChainLength) == 0)) {
       endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
       P = ConstantInt::get(IntegerType::get(context, 36), 0);
     }

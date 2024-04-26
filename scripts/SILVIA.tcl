@@ -35,13 +35,15 @@ namespace eval SILVIA {
 		::csynth_design
 		exec unzip -o -d dut ${project_path}/${solution_name}_FE/.autopilot/db/dut.hcp
 		set ::env(LD_LIBRARY_PATH) "${LLVM_ROOT}/lib/:$::env(LD_LIBRARY_PATH)"
-		exec ${LLVM_ROOT}/bin/llvm-link ${ROOT}/template/${simd_op}/${simd_op}.ll dut/a.o.3.bc -o dut/a.o.3.bc
-		switch ${simd_op} {
-			"add" {
-				exec ${LLVM_ROOT}/bin/opt -load ${LLVM_ROOT}/lib/LLVMSILVIAAdd.so -basicaa -silvia-add -silvia-add-simd-factor ${simd_factor} -dce dut/a.o.3.bc -o dut/a.o.3.bc |& cat | tee SILVIA.log
-			}
-			"muladd" {
-				exec ${LLVM_ROOT}/bin/opt -load ${LLVM_ROOT}/lib/LLVMSILVIAMuladd.so -basicaa -silvia-muladd -silvia-muladd-inline=false -dce dut/a.o.3.bc -o dut/a.o.3.bc |& cat | tee SILVIA.log
+		foreach simd_op [dict keys ${SIMD_OP}] {
+			exec ${LLVM_ROOT}/bin/llvm-link ${ROOT}/template/${simd_op}/${simd_op}.ll dut/a.o.3.bc -o dut/a.o.3.bc
+			switch ${simd_op} {
+				"add" {
+					exec ${LLVM_ROOT}/bin/opt -load ${LLVM_ROOT}/lib/LLVMSILVIAAdd.so -basicaa -silvia-add -silvia-add-simd-factor ${simd_factor} -dce dut/a.o.3.bc -o dut/a.o.3.bc |& cat | tee SILVIA.log
+				}
+				"muladd" {
+					exec ${LLVM_ROOT}/bin/opt -load ${LLVM_ROOT}/lib/LLVMSILVIAMuladd.so -basicaa -silvia-muladd -dce dut/a.o.3.bc -o dut/a.o.3.bc |& cat | tee SILVIA.log
+				}
 			}
 		}
 		exec zip -rj dut.hcp dut
@@ -49,14 +51,16 @@ namespace eval SILVIA {
 		read_checkpoint dut.hcp
 		::csynth_design -hw_syn
 	
-		if { ${simd_op} == "add" } {
-			foreach dir "syn impl" {
-				set simd_name "_simd_${simd_op}_${simd_factor}"
-				foreach f [glob -nocomplain ${project_path}/${solution_name}/${dir}/verilog/*${simd_name}.v] {
-					set fbasename [file tail $f]
-					if {[regexp "^(.*)${simd_name}\.v\$" $fbasename -> prefix]} {
-						file copy -force ${ROOT}/template/${simd_op}/${simd_op}.v $f
-						exec sh -c "sed -i 's/${simd_name}/${prefix}${simd_name}/g' $f"
+		dict for {simd_op simd_factor} ${SIMD_OP} {
+			if { ${simd_op} == "add" } {
+				foreach dir "syn impl" {
+					set simd_name "_simd_${simd_op}_${simd_factor}"
+					foreach f [glob -nocomplain ${project_path}/${solution_name}/${dir}/verilog/*${simd_name}.v] {
+						set fbasename [file tail $f]
+						if {[regexp "^(.*)${simd_name}\.v\$" $fbasename -> prefix]} {
+							file copy -force ${ROOT}/template/${simd_op}/${simd_op}.v $f
+							exec sh -c "sed -i 's/${simd_name}/${prefix}${simd_name}/g' $f"
+						}
 					}
 				}
 			}

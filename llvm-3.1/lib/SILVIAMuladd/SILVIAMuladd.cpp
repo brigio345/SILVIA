@@ -318,7 +318,8 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
               ->getScalarSizeInBits() <= 8) &&
          (getUnextendedValue(leafInst->getOperand(1))
               ->getType()
-              ->getScalarSizeInBits() <= 8)))
+              ->getScalarSizeInBits() <= 8)) &&
+        leafInst->hasOneUse())
       unpackedMulsA.push_back(leafInst);
     else
       toAddA.push_back(leaf);
@@ -333,7 +334,8 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
               ->getScalarSizeInBits() <= 8) &&
          (getUnextendedValue(leafInst->getOperand(1))
               ->getType()
-              ->getScalarSizeInBits() <= 8)))
+              ->getScalarSizeInBits() <= 8)) &&
+        leafInst->hasOneUse())
       unpackedMulsB.push_back(leafInst);
     else
       toAddB.push_back(leaf);

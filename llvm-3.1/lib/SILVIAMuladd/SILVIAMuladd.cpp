@@ -248,7 +248,7 @@ Value *buildAddTree(SmallVector<Value *, 8> &addends, int ext,
     return nullptr;
 
   SmallVector<Value *, 8> lowerAddends;
-  for (int i = 0; i < addends.size(); i += 2) {
+  for (unsigned i = 0; i < addends.size(); i += 2) {
     auto A = addends[i];
     auto B = (((i + 1) < addends.size()) ? addends[i + 1] : nullptr);
 
@@ -362,7 +362,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   for (auto mul : unpackedMulsB)
     toAddB.push_back(mul);
 
-  auto maxChainLength = getMaxChainLength(leavesPacks, extB);
+  int maxChainLength = getMaxChainLength(leavesPacks, extB);
   if ((SILVIAMuladdMaxChainLen > 0) &&
       (maxChainLength > SILVIAMuladdMaxChainLen))
     maxChainLength = SILVIAMuladdMaxChainLen;
@@ -373,7 +373,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
   SmallVector<Value *, 4> endsOfChain;
   SmallVector<Value *, 8> mulAddCalls;
-  for (int dspID = 0; dspID < leavesPacks.size(); ++dspID) {
+  for (unsigned dspID = 0; dspID < leavesPacks.size(); ++dspID) {
     if ((dspID > 0) && ((dspID % balancedChainLength) == 0)) {
       endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
       P = ConstantInt::get(IntegerType::get(context, 36), 0);

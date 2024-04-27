@@ -106,7 +106,7 @@ void SILVIAAdd::replaceInstsWithSIMDCall(
   Value *sumAggr = builder.CreateCall(SIMDFunc, args, retName);
 
   Value *result[4];
-  for (int i = 0; i < instTuple.size(); ++i) {
+  for (unsigned i = 0; i < instTuple.size(); ++i) {
     result[i] = builder.CreateExtractValue(
         sumAggr, i, instTuple[i].outInst->getName() + "_zext");
     if (instTuple[i].outInst->getType()->getScalarSizeInBits() < dataBitWidth)

@@ -64,7 +64,7 @@ bool dependsOn(Instruction *inst0, Instruction *inst1) {
   if (inst0 == inst1)
     return true;
 
-  for (int i = 0; i < inst0->getNumOperands(); ++i) {
+  for (unsigned i = 0; i < inst0->getNumOperands(); ++i) {
     if (auto operandInst = dyn_cast<Instruction>(inst0->getOperand(i))) {
       if (dependsOn(operandInst, inst1))
         return true;

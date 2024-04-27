@@ -7,6 +7,7 @@
 #include "llvm/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/IRBuilder.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -295,6 +296,8 @@ bool SILVIA::posticipateUses(Instruction *inst, bool posticipateInst = false) {
 
 bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   Function *F = BB.getParent();
+  DEBUG(dbgs() << "SILVIA::runOnBasicBlock: called on " << F->getName() << " @ "
+               << BB.getName() << ".\n");
   if (F->getName().startswith("_ssdm_op") || F->getName().startswith("_simd"))
     return false;
 
@@ -303,6 +306,9 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   AA = &getAnalysis<AliasAnalysis>();
 
   std::list<SILVIA::Candidate> candidateInsts = getSIMDableInstructions(BB);
+  DEBUG(if (candidateInsts.size() > 0) dbgs()
+        << "SILVIA::getSIMDableInstructions: found " << candidateInsts.size()
+        << " candidates.\n");
 
   if (candidateInsts.size() < 2)
     return false;
@@ -381,6 +387,8 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
     if (instTuple.size() < 2)
       continue;
 
+    DEBUG(dbgs() << "SILVIA::runOnBasicBlock: found a tuple of "
+                 << instTuple.size() << " elements.\n");
     auto insertBefore = (firstUse ? firstUse : BB.getTerminator());
     replaceInstsWithSIMDCall(instTuple, insertBefore, context);
     modified = true;

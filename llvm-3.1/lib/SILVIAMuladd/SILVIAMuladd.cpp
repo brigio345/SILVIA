@@ -3,6 +3,7 @@
 #include "llvm/Function.h"
 #include "llvm/Module.h"
 #include "llvm/Pass.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/IRBuilder.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 
@@ -100,6 +101,9 @@ void getAddTree(Instruction *root, SILVIAMuladd::AddTree &tree) {
     }
 
     if ((!hasOneUse) || (!opInst)) {
+      DEBUG(dbgs() << "SILVIAMuladd::getAddTree: leaf detected because operand "
+                   << ((!hasOneUse) ? "has many uses.\n"
+                                    : "is not an Instruction.\n"));
       tree.candidate.inVals.push_back(op);
       continue;
     }
@@ -111,6 +115,11 @@ void getAddTree(Instruction *root, SILVIAMuladd::AddTree &tree) {
       getAddTree(opInst, tree);
       tree.addInternal.push_back(opInst);
     } else {
+      DEBUG(dbgs() << "SILVIAMuladd::getAddTree: leaf detected because operand "
+                   << ((!hasOneUse) ? "has many uses.\n"
+                                    : "is not an add (" +
+                                          std::string(opInst->getOpcodeName()) +
+                                          ").\n"));
       tree.candidate.inVals.push_back(op);
     }
   }
@@ -144,11 +153,15 @@ SILVIAMuladd::getSIMDableInstructions(BasicBlock &BB) {
       getAddTree(I, tree);
 
       auto validMuls = 0;
+#ifdef DEBUG
+      auto muls = 0;
+#endif /* DEBUG */
       for (auto leaf : tree.candidate.inVals) {
         if (auto leafInst = dyn_cast<Instruction>(leaf)) {
           if (leafInst->getOpcode() != Instruction::Mul)
             continue;
 
+          DEBUG(muls++);
           validMuls += ((getUnextendedValue(leafInst->getOperand(0))
                              ->getType()
                              ->getScalarSizeInBits() <= 8) &&
@@ -158,6 +171,9 @@ SILVIAMuladd::getSIMDableInstructions(BasicBlock &BB) {
         }
       }
 
+      DEBUG(if (muls > 0) dbgs()
+            << "SILVIAMuladd::getSIMDableInstructions: found a tree with "
+            << muls << " muls (" << validMuls << " valid).\n");
       if (validMuls > 1)
         trees.push_back(tree);
     }
@@ -209,6 +225,11 @@ bool SILVIAMuladd::isCandidateCompatibleWithTuple(
     }
   }
 
+  DEBUG(dbgs()
+        << "SILVIAMuladd::isCandidateCompatibleWithTuple: candidate rooted in "
+        << candidate.outInst->getName()
+        << " does not share an operand with candidate rooted in "
+        << tuple[0].outInst->getName() << ".\n");
   return false;
 }
 
@@ -461,6 +482,9 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
     for (auto endOfChain : endsOfChain)
       InlineFunction(endOfChain, IFI);
   }
+
+  DEBUG(dbgs() << "SILVIAMuladd::replaceInstsWithSIMDCall: packed "
+               << leavesPacks.size() << " pairs.\n");
 }
 
 bool SILVIAMuladd::runOnBasicBlock(BasicBlock &BB) {

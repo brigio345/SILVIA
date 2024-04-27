@@ -6,11 +6,15 @@ namespace eval SILVIA {
 	variable ROOT
 	variable LLVM_ROOT
 	variable SIMD_OP
+	variable DEBUG 0
+	variable DEBUG_FILE "SILVIA.log"
 
 	proc csynth_design {} {
 		variable ROOT
 		variable LLVM_ROOT
 		variable SIMD_OP
+		variable DEBUG
+		variable DEBUG_FILE
 
 		set simd_op [lindex [dict keys ${SIMD_OP}] 0]
 		set simd_factor [dict get ${SIMD_OP} ${simd_op}]
@@ -35,16 +39,26 @@ namespace eval SILVIA {
 		::csynth_design
 		exec unzip -o -d dut ${project_path}/${solution_name}_FE/.autopilot/db/dut.hcp
 		set ::env(LD_LIBRARY_PATH) "${LLVM_ROOT}/lib/:$::env(LD_LIBRARY_PATH)"
+		if {${DEBUG} == 1} {
+			file delete ${DEBUG_FILE}
+		}
 		foreach simd_op [dict keys ${SIMD_OP}] {
 			exec ${LLVM_ROOT}/bin/llvm-link ${ROOT}/template/${simd_op}/${simd_op}.ll dut/a.o.3.bc -o dut/a.o.3.bc
-			switch ${simd_op} {
-				"add" {
-					exec ${LLVM_ROOT}/bin/opt -load ${LLVM_ROOT}/lib/LLVMSILVIAAdd.so -basicaa -silvia-add -silvia-add-simd-factor ${simd_factor} -dce dut/a.o.3.bc -o dut/a.o.3.bc |& cat | tee SILVIA.log
-				}
-				"muladd" {
-					exec ${LLVM_ROOT}/bin/opt -load ${LLVM_ROOT}/lib/LLVMSILVIAMuladd.so -basicaa -silvia-muladd -dce dut/a.o.3.bc -o dut/a.o.3.bc |& cat | tee SILVIA.log
-				}
+			set opt_cmd "${LLVM_ROOT}/bin/opt"
+			if {${DEBUG} == 1} {
+				append opt_cmd " -debug"
 			}
+			append opt_cmd " -load ${LLVM_ROOT}/lib/LLVMSILVIA[string toupper ${simd_op} 0 0].so"
+			append opt_cmd " -basicaa -silvia-${simd_op}"
+			if {${simd_op} == "add"} {
+				append opt_cmd " -silvia-add-simd-factor=${simd_factor}"
+			}
+			append opt_cmd " -dce dut/a.o.3.bc -o dut/a.o.3.bc"
+			if {${DEBUG} == 1} {
+				append opt_cmd " |& cat | tee -a ${DEBUG_FILE}"
+			}
+
+			eval exec ${opt_cmd}
 		}
 		exec zip -rj dut.hcp dut
 		open_solution ${solution_name}

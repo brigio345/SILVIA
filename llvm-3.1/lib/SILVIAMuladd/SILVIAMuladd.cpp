@@ -174,7 +174,7 @@ SILVIAMuladd::getSIMDableInstructions(BasicBlock &BB) {
       DEBUG(if (muls > 0) dbgs()
             << "SILVIAMuladd::getSIMDableInstructions: found a tree with "
             << muls << " muls (" << validMuls << " valid).\n");
-      if (validMuls > 1)
+      if (validMuls > 0)
         trees.push_back(tree);
     }
   }

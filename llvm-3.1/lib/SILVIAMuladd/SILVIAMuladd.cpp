@@ -445,8 +445,8 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   treeA.outInst->replaceAllUsesWith(sumA);
   treeB.outInst->replaceAllUsesWith(sumB);
 
-  auto rootAName = treeA.outInst->getName();
-  auto rootBName = treeB.outInst->getName();
+  std::string rootAName = treeA.outInst->getName();
+  std::string rootBName = treeB.outInst->getName();
 
   treeA.outInst->eraseFromParent();
   treeB.outInst->eraseFromParent();

@@ -33,6 +33,8 @@ struct SILVIA : public BasicBlockPass {
   }
 
   static Value *getUnextendedValue(Value *V);
+  static int getExtOpcode(Instruction *I);
+
   virtual std::list<SILVIA::Candidate> getSIMDableInstructions(BasicBlock &BB) {
     return std::list<SILVIA::Candidate>();
   }
@@ -236,6 +238,17 @@ Value *SILVIA::getUnextendedValue(Value *V) {
   }
 
   return V;
+}
+
+int SILVIA::getExtOpcode(Instruction *I) {
+  for (auto UI = I->use_begin(), UE = I->use_end(); UI != UE; ++UI) {
+    Instruction *user = dyn_cast<Instruction>(*UI);
+    auto userOpcode = user->getOpcode();
+    if ((userOpcode == Instruction::SExt) || (userOpcode == Instruction::ZExt))
+      return userOpcode;
+  }
+
+  return -1;
 }
 
 bool SILVIA::anticipateDefs(Instruction *inst, bool anticipateInst = false) {

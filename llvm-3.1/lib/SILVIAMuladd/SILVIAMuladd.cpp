@@ -59,17 +59,6 @@ struct LeavesPack {
   std::string name;
 };
 
-int getExtOpcode(Instruction *I) {
-  for (auto UI = I->use_begin(), UE = I->use_end(); UI != UE; ++UI) {
-    Instruction *user = dyn_cast<Instruction>(*UI);
-    auto userOpcode = user->getOpcode();
-    if ((userOpcode == Instruction::SExt) || (userOpcode == Instruction::ZExt))
-      return userOpcode;
-  }
-
-  return -1;
-}
-
 void getAddTree(Instruction *root, SILVIAMuladd::AddTree &tree) {
   if (root->getOpcode() != Instruction::Add) {
     tree.candidate.inVals.push_back(root);
@@ -346,10 +335,10 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) ||
           (opA1 == opB1)) {
         if (leavesPacks.size() == 0) {
-          ext[0] = getExtOpcode(mulLeafA);
-          ext[1] = getExtOpcode(mulLeafB);
-        } else if ((getExtOpcode(mulLeafA) != ext[0]) ||
-                   (getExtOpcode(mulLeafB) != ext[1])) {
+          ext[0] = SILVIA::getExtOpcode(mulLeafA);
+          ext[1] = SILVIA::getExtOpcode(mulLeafB);
+        } else if ((SILVIA::getExtOpcode(mulLeafA) != ext[0]) ||
+                   (SILVIA::getExtOpcode(mulLeafB) != ext[1])) {
           return;
         }
 

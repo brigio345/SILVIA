@@ -299,91 +299,56 @@ Value *buildAddTree(SmallVector<Value *, 8> &addends, int ext,
 void SILVIAMuladd::replaceInstsWithSIMDCall(
     SmallVector<SILVIA::Candidate, 4> instTuple, Instruction *insertBefore,
     LLVMContext &context) {
-  const auto treeA = instTuple[0];
-  const auto treeB = instTuple[1];
-
   IRBuilder<> builder(insertBefore);
 
-  SmallVector<Value *, 8> toAddA;
-  SmallVector<Instruction *, 8> unpackedMulsA;
-  SmallVector<Value *, 8> toAddB;
-  SmallVector<Instruction *, 8> unpackedMulsB;
+  SmallVector<SmallVector<Value *, 8>, 2> toAdd(instTuple.size());
+  SmallVector<SmallVector<Instruction *, 8>, 2> unpackedMuls(instTuple.size());
 
-  for (auto leaf : treeA.inVals) {
-    auto leafInst = dyn_cast<Instruction>(leaf);
+  for (unsigned i = 0; i < instTuple.size(); ++i) {
+    for (auto leaf : instTuple[i].inVals) {
+      auto leafInst = dyn_cast<Instruction>(leaf);
 
-    if ((leafInst) && (leafInst->getOpcode() == Instruction::Mul) &&
-        ((getUnextendedValue(leafInst->getOperand(0))
-              ->getType()
-              ->getScalarSizeInBits() <= 8) &&
-         (getUnextendedValue(leafInst->getOperand(1))
-              ->getType()
-              ->getScalarSizeInBits() <= 8))) {
-      if (leafInst->getNumUses() > 1) {
-        SmallVector<CallInst *, 4> pragmas;
-        for (auto UI = leafInst->use_begin(), UE = leafInst->use_end();
-             UI != UE; ++UI) {
-          if (auto *user = dyn_cast<CallInst>(*UI)) {
-            auto calleeName = user->getCalledFunction()->getName();
-            // TODO: Do not clash with SpecFUCore pragma: if the third
-            // parameter of _ssdm_op_SpecFUCore is 4, the mul should be
-            // implemented in LUTs.
-            if (calleeName == "_ssdm_op_SpecFUCore")
-              pragmas.push_back(user);
+      if ((leafInst) && (leafInst->getOpcode() == Instruction::Mul) &&
+          ((getUnextendedValue(leafInst->getOperand(0))
+                ->getType()
+                ->getScalarSizeInBits() <= 8) &&
+           (getUnextendedValue(leafInst->getOperand(1))
+                ->getType()
+                ->getScalarSizeInBits() <= 8))) {
+        if (leafInst->getNumUses() > 1) {
+          SmallVector<CallInst *, 4> pragmas;
+          for (auto UI = leafInst->use_begin(), UE = leafInst->use_end();
+               UI != UE; ++UI) {
+            if (auto *user = dyn_cast<CallInst>(*UI)) {
+              auto calleeName = user->getCalledFunction()->getName();
+              // TODO: Do not clash with SpecFUCore pragma: if the third
+              // parameter of _ssdm_op_SpecFUCore is 4, the mul should be
+              // implemented in LUTs.
+              if (calleeName == "_ssdm_op_SpecFUCore")
+                pragmas.push_back(user);
+            }
           }
+          for (auto pragma : pragmas)
+            pragma->eraseFromParent();
         }
-        for (auto pragma : pragmas)
-          pragma->eraseFromParent();
+        if (leafInst->hasOneUse())
+          unpackedMuls[i].push_back(leafInst);
+        else
+          toAdd[i].push_back(leaf);
+      } else {
+        toAdd[i].push_back(leaf);
       }
-      if (leafInst->hasOneUse())
-        unpackedMulsA.push_back(leafInst);
-      else
-        toAddA.push_back(leaf);
-    } else {
-      toAddA.push_back(leaf);
     }
   }
 
-  for (auto leaf : treeB.inVals) {
-    auto leafInst = dyn_cast<Instruction>(leaf);
-
-    if ((leafInst) && (leafInst->getOpcode() == Instruction::Mul) &&
-        ((getUnextendedValue(leafInst->getOperand(0))
-              ->getType()
-              ->getScalarSizeInBits() <= 8) &&
-         (getUnextendedValue(leafInst->getOperand(1))
-              ->getType()
-              ->getScalarSizeInBits() <= 8))) {
-      if (leafInst->getNumUses() > 1) {
-        SmallVector<CallInst *, 4> pragmas;
-        for (auto UI = leafInst->use_begin(), UE = leafInst->use_end();
-             UI != UE; ++UI) {
-          if (auto *user = dyn_cast<CallInst>(*UI)) {
-            auto calleeName = user->getCalledFunction()->getName();
-            if (calleeName == "_ssdm_op_SpecFUCore")
-              pragmas.push_back(user);
-          }
-        }
-        for (auto pragma : pragmas)
-          pragma->eraseFromParent();
-      }
-      if (leafInst->hasOneUse())
-        unpackedMulsB.push_back(leafInst);
-      else
-        toAddB.push_back(leaf);
-    } else
-      toAddB.push_back(leaf);
-  }
-
   SmallVector<LeavesPack, 8> leavesPacks;
-  int extA;
-  int extB;
-  for (auto mulLeafA : unpackedMulsA) {
+  SmallVector<int, 2> ext(instTuple.size());
+  for (auto mulLeafA : unpackedMuls[0]) {
     auto packed = false;
     auto opA0 = mulLeafA->getOperand(0);
     auto opA1 = mulLeafA->getOperand(1);
-    for (auto MI = unpackedMulsB.begin(), ME = unpackedMulsB.end(); MI != ME;
-         ++MI) {
+    for (auto MI = unpackedMuls[1].begin(), ME = unpackedMuls[1].end();
+         MI != ME; ++MI) {
       auto mulLeafB = *MI;
       auto opB0 = mulLeafB->getOperand(0);
       auto opB1 = mulLeafB->getOperand(1);
@@ -391,10 +356,10 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) ||
           (opA1 == opB1)) {
         if (leavesPacks.size() == 0) {
-          extA = getExtOpcode(mulLeafA);
-          extB = getExtOpcode(mulLeafB);
-        } else if ((getExtOpcode(mulLeafA) != extA) ||
-                   (getExtOpcode(mulLeafB) != extB)) {
+          ext[0] = getExtOpcode(mulLeafA);
+          ext[1] = getExtOpcode(mulLeafB);
+        } else if ((getExtOpcode(mulLeafA) != ext[0]) ||
+                   (getExtOpcode(mulLeafB) != ext[1])) {
           return;
         }
 
@@ -407,26 +372,26 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
 
         leavesPacks.push_back(pack);
         packed = true;
-        unpackedMulsB.erase(MI);
+        unpackedMuls[1].erase(MI);
 
         break;
       }
     }
     if (!packed)
-      toAddA.push_back(mulLeafA);
+      toAdd[0].push_back(mulLeafA);
   }
 
-  for (auto mul : unpackedMulsB)
-    toAddB.push_back(mul);
+  for (auto mul : unpackedMuls[1])
+    toAdd[1].push_back(mul);
 
-  int maxChainLength = getMaxChainLength(leavesPacks, extB);
+  int maxChainLength = getMaxChainLength(leavesPacks, ext[1]);
   if ((SILVIAMuladdMaxChainLen > 0) &&
       (maxChainLength > SILVIAMuladdMaxChainLen))
     maxChainLength = SILVIAMuladdMaxChainLen;
   int numChains = std::ceil(leavesPacks.size() / ((float)maxChainLength));
   int balancedChainLength = std::ceil(leavesPacks.size() / ((float)numChains));
   auto ExtractProds =
-      ((extB == Instruction::SExt) ? ExtractProdsSign : ExtractProdsUnsign);
+      ((ext[1] == Instruction::SExt) ? ExtractProdsSign : ExtractProdsUnsign);
   Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
   SmallVector<Value *, 4> endsOfChain;
   SmallVector<Value *, 8> mulAddCalls;
@@ -471,45 +436,42 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
   endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
 
   // 2. sum the extracted prods to the unpacked leafs
-  for (auto endOfChain : endsOfChain) {
-    toAddA.push_back(builder.CreateExtractValue(endOfChain, 0));
-    toAddB.push_back(builder.CreateExtractValue(endOfChain, 1));
+  for (unsigned i = 0; i < toAdd.size(); ++i) {
+    for (auto endOfChain : endsOfChain)
+      toAdd[i].push_back(builder.CreateExtractValue(endOfChain, i));
   }
 
-  Value *sumA = buildAddTree(toAddA, extA, builder, context);
-  Value *sumB = buildAddTree(toAddB, extB, builder, context);
+  SmallVector<Value *, 2> sums;
+  for (unsigned i = 0; i < toAdd.size(); ++i)
+    sums.push_back(buildAddTree(toAdd[i], ext[i], builder, context));
 
-  const auto rootASize = treeA.outInst->getType()->getScalarSizeInBits();
-  if (rootASize < sumA->getType()->getScalarSizeInBits()) {
-    sumA = builder.CreateTrunc(sumA, IntegerType::get(context, rootASize));
-  } else if (rootASize > sumA->getType()->getScalarSizeInBits()) {
-    sumA =
-        ((extA == Instruction::SExt)
-             ? builder.CreateSExt(sumA, IntegerType::get(context, rootASize))
-             : builder.CreateZExt(sumA, IntegerType::get(context, rootASize)));
-  }
-  const auto rootBSize = treeB.outInst->getType()->getScalarSizeInBits();
-  if (rootBSize < sumB->getType()->getScalarSizeInBits()) {
-    sumB = builder.CreateTrunc(sumB, IntegerType::get(context, rootBSize));
-  } else if (rootBSize > sumB->getType()->getScalarSizeInBits()) {
-    sumB =
-        ((extB == Instruction::SExt)
-             ? builder.CreateSExt(sumB, IntegerType::get(context, rootBSize))
-             : builder.CreateZExt(sumB, IntegerType::get(context, rootBSize)));
+  for (unsigned i = 0; i < sums.size(); ++i) {
+    const auto rootSize =
+        instTuple[i].outInst->getType()->getScalarSizeInBits();
+    if (rootSize < sums[i]->getType()->getScalarSizeInBits()) {
+      sums[i] =
+          builder.CreateTrunc(sums[i], IntegerType::get(context, rootSize));
+    } else if (rootSize > sums[i]->getType()->getScalarSizeInBits()) {
+      sums[i] = ((ext[i] == Instruction::SExt)
+                     ? builder.CreateSExt(sums[i],
+                                          IntegerType::get(context, rootSize))
+                     : builder.CreateZExt(sums[i],
+                                          IntegerType::get(context, rootSize)));
+    }
   }
 
   // 3. replaceAllUsesWith sumA and sumB
-  treeA.outInst->replaceAllUsesWith(sumA);
-  treeB.outInst->replaceAllUsesWith(sumB);
+  SmallVector<std::string, 2> rootNames;
+  for (unsigned i = 0; i < instTuple.size(); ++i) {
+    instTuple[i].outInst->replaceAllUsesWith(sums[i]);
+    rootNames.push_back(instTuple[i].outInst->getName());
+  }
 
-  std::string rootAName = treeA.outInst->getName();
-  std::string rootBName = treeB.outInst->getName();
+  for (auto tree : instTuple)
+    tree.outInst->eraseFromParent();
 
-  treeA.outInst->eraseFromParent();
-  treeB.outInst->eraseFromParent();
-
-  sumA->setName(rootAName);
-  sumB->setName(rootBName);
+  for (unsigned i = 0; i < sums.size(); ++i)
+    sums[i]->setName(rootNames[i]);
 
   if (SILVIAMuladdInline) {
     InlineFunctionInfo IFI;

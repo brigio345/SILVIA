@@ -318,11 +318,30 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
               ->getScalarSizeInBits() <= 8) &&
          (getUnextendedValue(leafInst->getOperand(1))
               ->getType()
-              ->getScalarSizeInBits() <= 8)) &&
-        leafInst->hasOneUse())
-      unpackedMulsA.push_back(leafInst);
-    else
+              ->getScalarSizeInBits() <= 8))) {
+      if (leafInst->getNumUses() > 1) {
+        SmallVector<CallInst *, 4> pragmas;
+        for (auto UI = leafInst->use_begin(), UE = leafInst->use_end();
+             UI != UE; ++UI) {
+          if (auto *user = dyn_cast<CallInst>(*UI)) {
+            auto calleeName = user->getCalledFunction()->getName();
+            // TODO: Do not clash with SpecFUCore pragma: if the third
+            // parameter of _ssdm_op_SpecFUCore is 4, the mul should be
+            // implemented in LUTs.
+            if (calleeName == "_ssdm_op_SpecFUCore")
+              pragmas.push_back(user);
+          }
+        }
+        for (auto pragma : pragmas)
+          pragma->eraseFromParent();
+      }
+      if (leafInst->hasOneUse())
+        unpackedMulsA.push_back(leafInst);
+      else
+        toAddA.push_back(leaf);
+    } else {
       toAddA.push_back(leaf);
+    }
   }
 
   for (auto leaf : treeB.inVals) {
@@ -334,10 +353,25 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
               ->getScalarSizeInBits() <= 8) &&
          (getUnextendedValue(leafInst->getOperand(1))
               ->getType()
-              ->getScalarSizeInBits() <= 8)) &&
-        leafInst->hasOneUse())
-      unpackedMulsB.push_back(leafInst);
-    else
+              ->getScalarSizeInBits() <= 8))) {
+      if (leafInst->getNumUses() > 1) {
+        SmallVector<CallInst *, 4> pragmas;
+        for (auto UI = leafInst->use_begin(), UE = leafInst->use_end();
+             UI != UE; ++UI) {
+          if (auto *user = dyn_cast<CallInst>(*UI)) {
+            auto calleeName = user->getCalledFunction()->getName();
+            if (calleeName == "_ssdm_op_SpecFUCore")
+              pragmas.push_back(user);
+          }
+        }
+        for (auto pragma : pragmas)
+          pragma->eraseFromParent();
+      }
+      if (leafInst->hasOneUse())
+        unpackedMulsB.push_back(leafInst);
+      else
+        toAddB.push_back(leaf);
+    } else
       toAddB.push_back(leaf);
   }
 

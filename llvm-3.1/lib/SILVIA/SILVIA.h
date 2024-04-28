@@ -32,6 +32,7 @@ struct SILVIA : public BasicBlockPass {
     AU.addRequired<AliasAnalysis>();
   }
 
+  static Value *getUnextendedValue(Value *V);
   virtual std::list<SILVIA::Candidate> getSIMDableInstructions(BasicBlock &BB) {
     return std::list<SILVIA::Candidate>();
   }
@@ -225,6 +226,16 @@ Instruction *SILVIA::getLastAliasingInst(Instruction *instToMove,
   }
 
   return nullptr;
+}
+
+Value *SILVIA::getUnextendedValue(Value *V) {
+  if (auto I = dyn_cast<Instruction>(V)) {
+    if ((I->getOpcode() == Instruction::SExt) ||
+        (I->getOpcode() == Instruction::ZExt))
+      return SILVIA::getUnextendedValue(I->getOperand(0));
+  }
+
+  return V;
 }
 
 bool SILVIA::anticipateDefs(Instruction *inst, bool anticipateInst = false) {

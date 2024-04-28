@@ -59,16 +59,6 @@ struct LeavesPack {
   std::string name;
 };
 
-Value *getUnextendedValue(Value *V) {
-  if (auto I = dyn_cast<Instruction>(V)) {
-    if ((I->getOpcode() == Instruction::SExt) ||
-        (I->getOpcode() == Instruction::ZExt))
-      return getUnextendedValue(I->getOperand(0));
-  }
-
-  return V;
-}
-
 int getExtOpcode(Instruction *I) {
   for (auto UI = I->use_begin(), UE = I->use_end(); UI != UE; ++UI) {
     Instruction *user = dyn_cast<Instruction>(*UI);
@@ -162,10 +152,10 @@ SILVIAMuladd::getSIMDableInstructions(BasicBlock &BB) {
             continue;
 
           DEBUG(muls++);
-          validMuls += ((getUnextendedValue(leafInst->getOperand(0))
+          validMuls += ((SILVIA::getUnextendedValue(leafInst->getOperand(0))
                              ->getType()
                              ->getScalarSizeInBits() <= 8) &&
-                        ((getUnextendedValue(leafInst->getOperand(1))
+                        ((SILVIA::getUnextendedValue(leafInst->getOperand(1))
                               ->getType()
                               ->getScalarSizeInBits() <= 8)));
         }
@@ -198,10 +188,10 @@ bool SILVIAMuladd::isCandidateCompatibleWithTuple(
       continue;
 
     // TODO: Check if the dyn_casts do not return nullptr.
-    auto opA0 =
-        getUnextendedValue(dyn_cast<Instruction>(mulLeafInstA->getOperand(0)));
-    auto opA1 =
-        getUnextendedValue(dyn_cast<Instruction>(mulLeafInstA->getOperand(1)));
+    auto opA0 = SILVIA::getUnextendedValue(
+        dyn_cast<Instruction>(mulLeafInstA->getOperand(0)));
+    auto opA1 = SILVIA::getUnextendedValue(
+        dyn_cast<Instruction>(mulLeafInstA->getOperand(1)));
     if ((opA0->getType()->getScalarSizeInBits() > 8) ||
         (opA1->getType()->getScalarSizeInBits() > 8))
       continue;
@@ -211,9 +201,9 @@ bool SILVIAMuladd::isCandidateCompatibleWithTuple(
       if ((!mulLeafInstB) || (mulLeafInstB->getOpcode() != Instruction::Mul))
         continue;
       // TODO: Check if the dyn_casts do not return nullptr.
-      auto opB0 = getUnextendedValue(
+      auto opB0 = SILVIA::getUnextendedValue(
           dyn_cast<Instruction>(mulLeafInstB->getOperand(0)));
-      auto opB1 = getUnextendedValue(
+      auto opB1 = SILVIA::getUnextendedValue(
           dyn_cast<Instruction>(mulLeafInstB->getOperand(1)));
 
       if ((opB0->getType()->getScalarSizeInBits() > 8) ||
@@ -243,7 +233,7 @@ unsigned getMaxChainLength(const SmallVector<LeavesPack, 8> &leavesPacks,
 
   for (auto leavesPack : leavesPacks) {
     for (int i = 0; i < 3; ++i) {
-      const auto size = getUnextendedValue(leavesPack.leaves[i])
+      const auto size = SILVIA::getUnextendedValue(leavesPack.leaves[i])
                             ->getType()
                             ->getScalarSizeInBits();
       if (size > maxSize[i])
@@ -309,10 +299,10 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       auto leafInst = dyn_cast<Instruction>(leaf);
 
       if ((leafInst) && (leafInst->getOpcode() == Instruction::Mul) &&
-          ((getUnextendedValue(leafInst->getOperand(0))
+          ((SILVIA::getUnextendedValue(leafInst->getOperand(0))
                 ->getType()
                 ->getScalarSizeInBits() <= 8) &&
-           (getUnextendedValue(leafInst->getOperand(1))
+           (SILVIA::getUnextendedValue(leafInst->getOperand(1))
                 ->getType()
                 ->getScalarSizeInBits() <= 8))) {
         if (leafInst->getNumUses() > 1) {
@@ -411,7 +401,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       auto argSize = MulAddTy->getParamType(i)->getScalarSizeInBits();
       if (args[i]->getType()->getScalarSizeInBits() > argSize) {
         auto argOrig = args[i];
-        args[i] = getUnextendedValue(args[i]);
+        args[i] = SILVIA::getUnextendedValue(args[i]);
         if (args[i]->getType()->getScalarSizeInBits() < argSize) {
           args[i] =
               builder.CreateTrunc(argOrig, IntegerType::get(context, argSize),

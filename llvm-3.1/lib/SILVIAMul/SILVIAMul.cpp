@@ -38,6 +38,10 @@ static RegisterPass<SILVIAMul> X("silvia-mul", "Pack muls to SIMD DSPs",
                                  false /* Only looks at CFG */,
                                  true /* Transformation Pass */);
 
+static cl::opt<bool>
+    SILVIAMulInline("silvia-mul-inline", cl::init(false), cl::Hidden,
+                    cl::desc("Whether to inline the packed operations."));
+
 // Collect all the add instructions.
 std::list<SILVIA::Candidate>
 SILVIAMul::getSIMDableInstructions(BasicBlock &BB) {
@@ -168,16 +172,39 @@ void SILVIAMul::replaceInstsWithSIMDCall(
   for (unsigned i = 0; i < prods.size(); ++i)
     prods[i]->setName(prodNames[i]);
 
-  //  InlineFunctionInfo IFI;
-  //  InlineFunction(P, IFI);
+  if (SILVIAMulInline) {
+    InlineFunctionInfo IFI;
+    InlineFunction(P, IFI);
+  }
 }
 
 bool SILVIAMul::runOnBasicBlock(BasicBlock &BB) {
   // Get the SIMD function
   Module *module = BB.getParent()->getParent();
-  MulAddSign = module->getFunction("_simd_mul_signed_2");
-  MulAddUnsign = module->getFunction("_simd_mul_unsigned_2");
+  MulAddSign = module->getFunction(
+      "_simd_mul_signed" + std::string(SILVIAMulInline ? "_inline_" : "_") +
+      "2");
+  MulAddUnsign = module->getFunction(
+      "_simd_mul_unsigned" + std::string(SILVIAMulInline ? "_inline_" : "_") +
+      "2");
   assert((MulAddSign && MulAddUnsign) && "SIMD functions not found");
 
-  return SILVIA::runOnBasicBlock(BB);
+  auto modified = SILVIA::runOnBasicBlock(BB);
+
+  if (SILVIAMulInline && modified) {
+    // InlineFunction may name some instructions with strings containing ".",
+    // resulting in illegal RTL code: replace all "." with "_" characters in
+    // the instruction names.
+    for (auto &I : BB) {
+      std::string name = I.getName().str();
+      size_t pos = name.find('.');
+      while (pos != std::string::npos) {
+        name.replace(pos, 1, "_");
+        pos = name.find('.', pos + 1);
+      }
+      I.setName(name);
+    }
+  }
+
+  return modified;
 }

@@ -29,9 +29,8 @@ struct SILVIAMul : public SILVIA {
                                 Instruction *insertBefore,
                                 LLVMContext &context) override;
 
-  Function *MulAdd;
-  Function *ExtractProdsSign;
-  Function *ExtractProdsUnsign;
+  Function *MulAddSign;
+  Function *MulAddUnsign;
 };
 
 char SILVIAMul::ID = 0;
@@ -92,8 +91,7 @@ void SILVIAMul::replaceInstsWithSIMDCall(
   ext[0] = SILVIA::getExtOpcode(instTuple[0].outInst);
   ext[1] = SILVIA::getExtOpcode(instTuple[1].outInst);
 
-  auto ExtractProds =
-      ((ext[1] == Instruction::SExt) ? ExtractProdsSign : ExtractProdsUnsign);
+  auto MulAdd = ((ext[1] == Instruction::SExt) ? MulAddSign : MulAddUnsign);
 
   pack.push_back(((instTuple[0].inVals[0] != instTuple[1].inVals[0]) &&
                   (instTuple[0].inVals[0] != instTuple[1].inVals[1]))
@@ -137,13 +135,10 @@ void SILVIAMul::replaceInstsWithSIMDCall(
   }
   auto P = builder.CreateCall(MulAdd, args, packName);
 
-  // 1. call extractProds from P
-  auto endOfChain = builder.CreateCall(ExtractProds, P);
-
-  // 2. sum the extracted prods to the unpacked leafs
+  // 1. sum the extracted prods to the unpacked leafs
   SmallVector<Value *, 2> prods;
   for (unsigned i = 0; i < instTuple.size(); ++i)
-    prods.push_back(builder.CreateExtractValue(endOfChain, i));
+    prods.push_back(builder.CreateExtractValue(P, i));
 
   for (unsigned i = 0; i < prods.size(); ++i) {
     const auto origSize =
@@ -160,7 +155,7 @@ void SILVIAMul::replaceInstsWithSIMDCall(
     }
   }
 
-  // 3. replaceAllUsesWith prods
+  // 2. replaceAllUsesWith prods
   SmallVector<std::string, 2> prodNames;
   for (unsigned i = 0; i < instTuple.size(); ++i) {
     instTuple[i].outInst->replaceAllUsesWith(prods[i]);
@@ -175,19 +170,14 @@ void SILVIAMul::replaceInstsWithSIMDCall(
 
   //  InlineFunctionInfo IFI;
   //  InlineFunction(P, IFI);
-  //  InlineFunction(endOfChain, IFI);
 }
 
 bool SILVIAMul::runOnBasicBlock(BasicBlock &BB) {
   // Get the SIMD function
   Module *module = BB.getParent()->getParent();
-  MulAdd = module->getFunction("_simd_mul_2");
-  assert(MulAdd && "SIMD function not found");
-
-  ExtractProdsSign = module->getFunction("_simd_mul_signed_extract_2");
-  ExtractProdsUnsign = module->getFunction("_simd_mul_unsigned_extract_2");
-  assert((ExtractProdsSign && ExtractProdsUnsign) &&
-         "SIMD extract function not found");
+  MulAddSign = module->getFunction("_simd_mul_signed_2");
+  MulAddUnsign = module->getFunction("_simd_mul_unsigned_2");
+  assert((MulAddSign && MulAddUnsign) && "SIMD functions not found");
 
   return SILVIA::runOnBasicBlock(BB);
 }

@@ -38,8 +38,8 @@ struct SILVIA : public BasicBlockPass {
   virtual std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) {
     return std::list<SILVIA::Candidate>();
   }
-  bool anticipateDefs(Instruction *inst, bool anticipateInst);
-  bool posticipateUses(Instruction *inst, bool posticipateInst);
+  bool moveDefsASAP(Instruction *inst, bool anticipateInst);
+  bool moveUsesALAP(Instruction *inst, bool posticipateInst);
   Instruction *getFirstAliasingInst(Instruction *instToMove,
                                     Instruction *firstInst,
                                     Instruction *lastInst);
@@ -252,7 +252,7 @@ int SILVIA::getExtOpcode(Instruction *I) {
   return -1;
 }
 
-bool SILVIA::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
+bool SILVIA::moveDefsASAP(Instruction *inst, bool anticipateInst = false) {
   // TODO: Anticipate calls if not crossing other calls or loads/stores.
   auto opcode = inst->getOpcode();
   if ((opcode == Instruction::PHI) || (opcode == Instruction::Call))
@@ -266,7 +266,7 @@ bool SILVIA::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
     if (!opInst)
       continue;
     if (opInst->getParent() == instBB)
-      modified = anticipateDefs(opInst, true);
+      modified = moveDefsASAP(opInst, true);
   }
 
   if (!anticipateInst)
@@ -286,7 +286,7 @@ bool SILVIA::anticipateDefs(Instruction *inst, bool anticipateInst = false) {
   return true;
 }
 
-bool SILVIA::posticipateUses(Instruction *inst, bool posticipateInst = false) {
+bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
   // TODO: Posticipate calls if not crossing other calls or loads/stores.
   auto opcode = inst->getOpcode();
   if ((opcode == Instruction::PHI) || (opcode == Instruction::Call))
@@ -300,7 +300,7 @@ bool SILVIA::posticipateUses(Instruction *inst, bool posticipateInst = false) {
     if (!userInst)
       continue;
     if (userInst->getParent() == instBB)
-      modified = posticipateUses(userInst, true);
+      modified = moveUsesALAP(userInst, true);
   }
 
   if (!posticipateInst)
@@ -342,10 +342,10 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
 
   candidateInsts.reverse();
   for (auto &candidateInstCurr : candidateInsts)
-    modified |= anticipateDefs(candidateInstCurr.outInst);
+    modified |= moveDefsASAP(candidateInstCurr.outInst);
   candidateInsts.reverse();
   for (auto &candidateInstCurr : candidateInsts)
-    modified |= posticipateUses(candidateInstCurr.outInst);
+    modified |= moveUsesALAP(candidateInstCurr.outInst);
 
   // Build tuples of SIMDFactor instructions that can be mapped to the
   // same SIMD DSP.

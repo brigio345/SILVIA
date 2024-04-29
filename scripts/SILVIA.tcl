@@ -5,19 +5,16 @@ package require tdom
 namespace eval SILVIA {
 	variable ROOT
 	variable LLVM_ROOT
-	variable SIMD_OP
+	variable PASSES
 	variable DEBUG 0
 	variable DEBUG_FILE "SILVIA.log"
 
 	proc csynth_design {} {
 		variable ROOT
 		variable LLVM_ROOT
-		variable SIMD_OP
+		variable PASSES
 		variable DEBUG
 		variable DEBUG_FILE
-
-		set simd_op [lindex [dict keys ${SIMD_OP}] 0]
-		set simd_factor [dict get ${SIMD_OP} ${simd_op}]
 
 		set project_path [get_project -directory]
 		set solution_name [get_solution]
@@ -42,16 +39,31 @@ namespace eval SILVIA {
 		if {${DEBUG} == 1} {
 			file delete ${DEBUG_FILE}
 		}
-		foreach simd_op [dict keys ${SIMD_OP}] {
-			exec ${LLVM_ROOT}/bin/llvm-link ${ROOT}/template/${simd_op}/${simd_op}.ll dut/a.o.3.bc -o dut/a.o.3.bc
+		foreach pass ${PASSES} {
+			if {[dict exist ${pass} OP] == 0} {
+				puts "Invalid pass due to missing OP: ${pass}"
+				continue
+			}
+			set op [dict get ${pass} OP]
+			set factor 2
+			if {${op} == "add" && [dict exist ${pass} FACTOR]} {
+				set factor [dict get ${pass} FACTOR]
+			}
+			exec ${LLVM_ROOT}/bin/llvm-link ${ROOT}/template/${op}/${op}.ll dut/a.o.3.bc -o dut/a.o.3.bc
 			set opt_cmd "${LLVM_ROOT}/bin/opt"
 			if {${DEBUG} == 1} {
 				append opt_cmd " -debug"
 			}
-			append opt_cmd " -load ${LLVM_ROOT}/lib/LLVMSILVIA[string toupper ${simd_op} 0 0].so"
-			append opt_cmd " -basicaa -silvia-${simd_op}"
-			if {${simd_op} == "add"} {
-				append opt_cmd " -silvia-add-simd-factor=${simd_factor}"
+			append opt_cmd " -load ${LLVM_ROOT}/lib/LLVMSILVIA[string toupper ${op} 0 0].so"
+			append opt_cmd " -basicaa -silvia-${op}"
+			if {${op} == "add"} {
+				append opt_cmd " -silvia-add-simd-factor=${factor}"
+			}
+			if {(${op} == "mul" || ${op} == "muladd") && [dict exist ${pass} INLINE]} {
+				append opt_cmd " -silvia-${op}-inline=[dict get ${pass} INLINE]"
+			}
+			if {${op} == "muladd" && [dict exist ${pass} MAX_CHAIN_LEN]} {
+				append opt_cmd " -silvia-muladd-max-chain-len=[dict get ${pass} MAX_CHAIN_LEN]"
 			}
 			append opt_cmd " -dce dut/a.o.3.bc -o dut/a.o.3.bc"
 			if {${DEBUG} == 1} {
@@ -65,15 +77,23 @@ namespace eval SILVIA {
 		read_checkpoint dut.hcp
 		::csynth_design -hw_syn
 	
-		dict for {simd_op simd_factor} ${SIMD_OP} {
-			if { ${simd_op} == "add" } {
+		foreach pass ${PASSES} {
+			if {[dict exist ${pass} OP] == 0} {
+				continue
+			}
+			set op [dict get ${pass} OP]
+			if {${op} == "add"} {
+				set factor 2
+				if {[dict exist ${pass} FACTOR]} {
+					set factor [dict get ${pass} FACTOR]
+				}
 				foreach dir "syn impl" {
-					set simd_name "_simd_${simd_op}_${simd_factor}"
-					foreach f [glob -nocomplain ${project_path}/${solution_name}/${dir}/verilog/*${simd_name}.v] {
+					set name "_simd_${op}_${factor}"
+					foreach f [glob -nocomplain ${project_path}/${solution_name}/${dir}/verilog/*${name}.v] {
 						set fbasename [file tail $f]
-						if {[regexp "^(.*)${simd_name}\.v\$" $fbasename -> prefix]} {
-							file copy -force ${ROOT}/template/${simd_op}/${simd_op}.v $f
-							exec sh -c "sed -i 's/${simd_name}/${prefix}${simd_name}/g' $f"
+						if {[regexp "^(.*)${name}\.v\$" $fbasename -> prefix]} {
+							file copy -force ${ROOT}/template/${op}/${op}.v $f
+							exec sh -c "sed -i 's/${name}/${prefix}${name}/g' $f"
 						}
 					}
 				}

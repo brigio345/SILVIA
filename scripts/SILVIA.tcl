@@ -32,8 +32,10 @@ namespace eval SILVIA {
 		set aps_file [open ${project_path}/${solution_name}_FE/${solution_name}_FE.aps w]
 		puts ${aps_file} [${doc} asXML]
 		close ${aps_file}
-		open_solution ${solution_name}_FE
-		::csynth_design
+		exec vitis_hls -l vitis_hls_FE.log -eval "open_project ${project_path}; open_solution ${solution_name}_FE; csynth_design; exit" &
+		while {[file exist ${project_path}/${solution_name}_FE/.autopilot/db/dut.hcp] == 0} {
+			after 3000
+		}
 		exec unzip -o -d dut ${project_path}/${solution_name}_FE/.autopilot/db/dut.hcp
 		set ::env(LD_LIBRARY_PATH) "${LLVM_ROOT}/lib/:$::env(LD_LIBRARY_PATH)"
 		if {${DEBUG} == 1} {

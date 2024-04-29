@@ -35,7 +35,7 @@ struct SILVIA : public BasicBlockPass {
   static Value *getUnextendedValue(Value *V);
   static int getExtOpcode(Instruction *I);
 
-  virtual std::list<SILVIA::Candidate> getSIMDableInstructions(BasicBlock &BB) {
+  virtual std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) {
     return std::list<SILVIA::Candidate>();
   }
   bool anticipateDefs(Instruction *inst, bool anticipateInst);
@@ -330,9 +330,9 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
 
   AA = &getAnalysis<AliasAnalysis>();
 
-  std::list<SILVIA::Candidate> candidateInsts = getSIMDableInstructions(BB);
+  std::list<SILVIA::Candidate> candidateInsts = getCandidates(BB);
   DEBUG(if (candidateInsts.size() > 0) dbgs()
-        << "SILVIA::getSIMDableInstructions: found " << candidateInsts.size()
+        << "SILVIA::getCandidates: found " << candidateInsts.size()
         << " candidates.\n");
 
   if (candidateInsts.size() < 2)

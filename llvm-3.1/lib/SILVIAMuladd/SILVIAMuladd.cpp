@@ -25,7 +25,7 @@ struct SILVIAMuladd : public SILVIA {
 
   bool runOnBasicBlock(BasicBlock &BB) override;
 
-  std::list<SILVIA::Candidate> getSIMDableInstructions(BasicBlock &BB) override;
+  std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) override;
   bool isCandidateCompatibleWithTuple(
       SILVIA::Candidate &candidate,
       SmallVector<SILVIA::Candidate, 4> &tuple) override;
@@ -105,8 +105,7 @@ void getAddTree(Instruction *root, SILVIAMuladd::AddTree &tree) {
   tree.candidate.outInst = root;
 }
 
-std::list<SILVIA::Candidate>
-SILVIAMuladd::getSIMDableInstructions(BasicBlock &BB) {
+std::list<SILVIA::Candidate> SILVIAMuladd::getCandidates(BasicBlock &BB) {
   SmallVector<SILVIAMuladd::AddTree, 8> trees;
   // Iterate in reverse order to avoid collecting subset trees.
   for (auto II = BB.end(), IB = BB.begin(); II != IB; --II) {
@@ -150,8 +149,8 @@ SILVIAMuladd::getSIMDableInstructions(BasicBlock &BB) {
       }
 
       DEBUG(if (muls > 0) dbgs()
-            << "SILVIAMuladd::getSIMDableInstructions: found a tree with "
-            << muls << " muls (" << validMuls << " valid).\n");
+            << "SILVIAMuladd::getCandidates: found a tree with " << muls
+            << " muls (" << validMuls << " valid).\n");
       if (validMuls > 0)
         trees.push_back(tree);
     }

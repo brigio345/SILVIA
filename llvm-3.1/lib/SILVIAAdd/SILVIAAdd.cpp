@@ -19,7 +19,7 @@ struct SILVIAAdd : public SILVIA {
 
   bool runOnBasicBlock(BasicBlock &BB) override;
 
-  std::list<SILVIA::Candidate> getSIMDableInstructions(BasicBlock &BB) override;
+  std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) override;
   bool isCandidateCompatibleWithTuple(
       SILVIA::Candidate &candidate,
       SmallVector<SILVIA::Candidate, 4> &tuple) override;
@@ -44,8 +44,7 @@ static cl::opt<unsigned int> DSPWidth("silvia-add-dsp-width", cl::init(48),
                                       cl::desc("The DSP width in bits."));
 
 // Collect all the add instructions.
-std::list<SILVIA::Candidate>
-SILVIAAdd::getSIMDableInstructions(BasicBlock &BB) {
+std::list<SILVIA::Candidate> SILVIAAdd::getCandidates(BasicBlock &BB) {
   std::list<SILVIA::Candidate> candidateInsts;
 
   const auto addMaxWidth = (DSPWidth / SIMDFactor);

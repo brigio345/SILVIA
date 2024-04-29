@@ -20,7 +20,7 @@ struct SILVIAMul : public SILVIA {
 
   bool runOnBasicBlock(BasicBlock &BB) override;
 
-  std::list<SILVIA::Candidate> getSIMDableInstructions(BasicBlock &BB) override;
+  std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) override;
   bool isCandidateCompatibleWithTuple(
       SILVIA::Candidate &candidate,
       SmallVector<SILVIA::Candidate, 4> &tuple) override;
@@ -42,8 +42,7 @@ static cl::opt<bool>
                     cl::desc("Whether to inline the packed operations."));
 
 // Collect all the add instructions.
-std::list<SILVIA::Candidate>
-SILVIAMul::getSIMDableInstructions(BasicBlock &BB) {
+std::list<SILVIA::Candidate> SILVIAMul::getCandidates(BasicBlock &BB) {
   std::list<SILVIA::Candidate> candidateInsts;
 
   const auto mulMaxWidth = 8;

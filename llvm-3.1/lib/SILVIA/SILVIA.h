@@ -54,9 +54,10 @@ struct SILVIA : public BasicBlockPass {
   virtual bool isTupleFull(SmallVector<SILVIA::Candidate, 4> &tuple) {
     return true;
   }
-  virtual void
-  replaceInstsWithSIMDCall(SmallVector<SILVIA::Candidate, 4> instTuple,
-                           Instruction *insertBefore, LLVMContext &context) {}
+  virtual Value *packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
+                           Instruction *insertBefore, LLVMContext &context) {
+    return nullptr;
+  }
 
   AliasAnalysis *AA;
 };
@@ -414,7 +415,23 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
     DEBUG(dbgs() << "SILVIA::runOnBasicBlock: found a tuple of "
                  << instTuple.size() << " elements.\n");
     auto insertBefore = (firstUse ? firstUse : BB.getTerminator());
-    replaceInstsWithSIMDCall(instTuple, insertBefore, context);
+    auto pack = packTuple(instTuple, insertBefore, context);
+
+    if (!pack)
+      continue;
+
+    DEBUG(dbgs() << "SILVIA::runOnBasicBlock: packed a tuple of "
+                 << instTuple.size() << " elements.\n");
+
+    IRBuilder<> builder(insertBefore);
+    for (unsigned i = 0; i < instTuple.size(); ++i) {
+      std::string origName = instTuple[i].outInst->getName();
+      auto packedInst = builder.CreateExtractValue(pack, i);
+      instTuple[i].outInst->replaceAllUsesWith(packedInst);
+      instTuple[i].outInst->eraseFromParent();
+      packedInst->setName(origName);
+    }
+
     modified = true;
   }
 

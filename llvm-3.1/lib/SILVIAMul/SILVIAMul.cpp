@@ -25,9 +25,8 @@ struct SILVIAMul : public SILVIA {
       SILVIA::Candidate &candidate,
       SmallVector<SILVIA::Candidate, 4> &tuple) override;
   virtual bool isTupleFull(SmallVector<SILVIA::Candidate, 4> &tuple);
-  void replaceInstsWithSIMDCall(SmallVector<SILVIA::Candidate, 4> instTuple,
-                                Instruction *insertBefore,
-                                LLVMContext &context) override;
+  Value *packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
+                   Instruction *insertBefore, LLVMContext &context) override;
 
   Function *MulAddSign;
   Function *MulAddUnsign;
@@ -84,9 +83,8 @@ bool SILVIAMul::isTupleFull(SmallVector<SILVIA::Candidate, 4> &tuple) {
   return (tuple.size() == 2);
 }
 
-void SILVIAMul::replaceInstsWithSIMDCall(
-    SmallVector<SILVIA::Candidate, 4> instTuple, Instruction *insertBefore,
-    LLVMContext &context) {
+Value *SILVIAMul::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
+                            Instruction *insertBefore, LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
   SmallVector<Value *, 3> pack;
@@ -159,23 +157,22 @@ void SILVIAMul::replaceInstsWithSIMDCall(
     }
   }
 
-  // 2. replaceAllUsesWith prods
-  SmallVector<std::string, 2> prodNames;
-  for (unsigned i = 0; i < instTuple.size(); ++i) {
-    instTuple[i].outInst->replaceAllUsesWith(prods[i]);
-    prodNames.push_back(instTuple[i].outInst->getName());
-  }
+  SmallVector<Type *, 2> prodTypes;
+  for (auto prod : prods)
+    prodTypes.push_back(prod->getType());
+  auto prodStructTy = StructType::create(prodTypes);
 
-  for (auto prod : instTuple)
-    prod.outInst->eraseFromParent();
+  Value *prodStruct = UndefValue::get(prodStructTy);
 
   for (unsigned i = 0; i < prods.size(); ++i)
-    prods[i]->setName(prodNames[i]);
+    prodStruct = builder.CreateInsertValue(prodStruct, prods[i], i);
 
   if (SILVIAMulInline) {
     InlineFunctionInfo IFI;
     InlineFunction(P, IFI);
   }
+
+  return prodStruct;
 }
 
 bool SILVIAMul::runOnBasicBlock(BasicBlock &BB) {

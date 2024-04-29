@@ -24,9 +24,8 @@ struct SILVIAAdd : public SILVIA {
       SILVIA::Candidate &candidate,
       SmallVector<SILVIA::Candidate, 4> &tuple) override;
   virtual bool isTupleFull(SmallVector<SILVIA::Candidate, 4> &tuple);
-  void replaceInstsWithSIMDCall(SmallVector<SILVIA::Candidate, 4> instTuple,
-                                Instruction *insertBefore,
-                                LLVMContext &context) override;
+  Value *packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
+                   Instruction *insertBefore, LLVMContext &context) override;
 
   Function *SIMDFunc;
 };
@@ -76,9 +75,8 @@ bool SILVIAAdd::isTupleFull(SmallVector<SILVIA::Candidate, 4> &tuple) {
   return (tuple.size() == SIMDFactor);
 }
 
-void SILVIAAdd::replaceInstsWithSIMDCall(
-    SmallVector<SILVIA::Candidate, 4> instTuple, Instruction *insertBefore,
-    LLVMContext &context) {
+Value *SILVIAAdd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
+                            Instruction *insertBefore, LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
   const auto dataBitWidth = (DSPWidth / SIMDFactor);
@@ -105,24 +103,26 @@ void SILVIAAdd::replaceInstsWithSIMDCall(
 
   Value *sumAggr = builder.CreateCall(SIMDFunc, args, retName);
 
-  Value *result[4];
+  SmallVector<Value *, 4> adds(instTuple.size());
   for (unsigned i = 0; i < instTuple.size(); ++i) {
-    result[i] = builder.CreateExtractValue(
+    adds[i] = builder.CreateExtractValue(
         sumAggr, i, instTuple[i].outInst->getName() + "_zext");
     if (instTuple[i].outInst->getType()->getScalarSizeInBits() < dataBitWidth)
-      result[i] =
-          builder.CreateTrunc(result[i], instTuple[i].outInst->getType());
+      adds[i] = builder.CreateTrunc(adds[i], instTuple[i].outInst->getType());
   }
 
   // Replace the add instruction with the result
-  for (unsigned i = 0; i < instTuple.size(); ++i) {
-    auto resName = instTuple[i].outInst->getName();
+  SmallVector<Type *, 2> addTypes;
+  for (auto add : adds)
+    addTypes.push_back(add->getType());
+  auto addStructTy = StructType::create(addTypes);
 
-    instTuple[i].outInst->replaceAllUsesWith(result[i]);
-    instTuple[i].outInst->eraseFromParent();
+  Value *addStruct = UndefValue::get(addStructTy);
 
-    result[i]->setName(resName);
-  }
+  for (unsigned i = 0; i < adds.size(); ++i)
+    addStruct = builder.CreateInsertValue(addStruct, adds[i], i);
+
+  return addStruct;
 }
 
 bool SILVIAAdd::runOnBasicBlock(BasicBlock &BB) {

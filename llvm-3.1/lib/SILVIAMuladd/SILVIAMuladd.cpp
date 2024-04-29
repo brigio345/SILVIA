@@ -30,9 +30,8 @@ struct SILVIAMuladd : public SILVIA {
       SILVIA::Candidate &candidate,
       SmallVector<SILVIA::Candidate, 4> &tuple) override;
   bool isTupleFull(SmallVector<SILVIA::Candidate, 4> &tuple) override;
-  void replaceInstsWithSIMDCall(SmallVector<SILVIA::Candidate, 4> instTuple,
-                                Instruction *insertBefore,
-                                LLVMContext &context) override;
+  Value *packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
+                   Instruction *insertBefore, LLVMContext &context) override;
 
   Function *MulAdd;
   Function *ExtractProdsSign;
@@ -275,9 +274,9 @@ Value *buildAddTree(SmallVector<Value *, 8> &addends, int ext,
               : buildAddTree(lowerAddends, ext, builder, context));
 }
 
-void SILVIAMuladd::replaceInstsWithSIMDCall(
-    SmallVector<SILVIA::Candidate, 4> instTuple, Instruction *insertBefore,
-    LLVMContext &context) {
+Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
+                               Instruction *insertBefore,
+                               LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
   SmallVector<SmallVector<Value *, 8>, 2> toAdd(instTuple.size());
@@ -339,7 +338,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
           ext[1] = SILVIA::getExtOpcode(mulLeafB);
         } else if ((SILVIA::getExtOpcode(mulLeafA) != ext[0]) ||
                    (SILVIA::getExtOpcode(mulLeafB) != ext[1])) {
-          return;
+          return nullptr;
         }
 
         LeavesPack pack;
@@ -439,18 +438,15 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
     }
   }
 
-  // 3. replaceAllUsesWith sumA and sumB
-  SmallVector<std::string, 2> rootNames;
-  for (unsigned i = 0; i < instTuple.size(); ++i) {
-    instTuple[i].outInst->replaceAllUsesWith(sums[i]);
-    rootNames.push_back(instTuple[i].outInst->getName());
-  }
+  SmallVector<Type *, 2> rootTypes;
+  for (auto root : sums)
+    rootTypes.push_back(root->getType());
+  auto rootStructTy = StructType::create(rootTypes);
 
-  for (auto tree : instTuple)
-    tree.outInst->eraseFromParent();
+  Value *rootStruct = UndefValue::get(rootStructTy);
 
   for (unsigned i = 0; i < sums.size(); ++i)
-    sums[i]->setName(rootNames[i]);
+    rootStruct = builder.CreateInsertValue(rootStruct, sums[i], i);
 
   if (SILVIAMuladdInline) {
     InlineFunctionInfo IFI;
@@ -460,8 +456,7 @@ void SILVIAMuladd::replaceInstsWithSIMDCall(
       InlineFunction(endOfChain, IFI);
   }
 
-  DEBUG(dbgs() << "SILVIAMuladd::replaceInstsWithSIMDCall: packed "
-               << leavesPacks.size() << " pairs.\n");
+  return rootStruct;
 }
 
 bool SILVIAMuladd::runOnBasicBlock(BasicBlock &BB) {

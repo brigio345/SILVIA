@@ -310,7 +310,7 @@ bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
   if (!insertionPoint)
     insertionPoint = instBB->getTerminator();
 
-  auto aliasingInst = getFirstAliasingInst(inst, insertionPoint, inst);
+  auto aliasingInst = getFirstAliasingInst(inst, inst, insertionPoint);
   if (aliasingInst)
     insertionPoint = aliasingInst;
 

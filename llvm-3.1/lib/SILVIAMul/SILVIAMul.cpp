@@ -86,7 +86,7 @@ Value *SILVIAMul::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
                             Instruction *insertBefore, LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
-  SmallVector<Value *, 3> pack;
+  SmallVector<Value *, 3> args;
   std::string packName;
   SmallVector<int, 2> ext(instTuple.size());
   ext[0] = SILVIA::getExtOpcode(instTuple[0].outInst);
@@ -94,15 +94,15 @@ Value *SILVIAMul::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
 
   auto MulAdd = ((ext[1] == Instruction::SExt) ? MulAddSign : MulAddUnsign);
 
-  pack.push_back(((instTuple[0].inVals[0] != instTuple[1].inVals[0]) &&
+  args.push_back(((instTuple[0].inVals[0] != instTuple[1].inVals[0]) &&
                   (instTuple[0].inVals[0] != instTuple[1].inVals[1]))
                      ? instTuple[0].inVals[0]
                      : instTuple[0].inVals[1]);
-  pack.push_back(((instTuple[1].inVals[0] != instTuple[0].inVals[0]) &&
+  args.push_back(((instTuple[1].inVals[0] != instTuple[0].inVals[0]) &&
                   (instTuple[1].inVals[0] != instTuple[0].inVals[1]))
                      ? instTuple[1].inVals[0]
                      : instTuple[1].inVals[1]);
-  pack.push_back(((instTuple[0].inVals[0] == instTuple[1].inVals[0]) ||
+  args.push_back(((instTuple[0].inVals[0] == instTuple[1].inVals[0]) ||
                   (instTuple[0].inVals[0] == instTuple[1].inVals[1]))
                      ? instTuple[0].inVals[0]
                      : instTuple[0].inVals[1]);
@@ -111,10 +111,9 @@ Value *SILVIAMul::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
 
   // pack mulLeafA and mulLeafB
   // assign the result to P
-  Value *args[3] = {pack[0], pack[1], pack[2]};
   auto MulAddTy = cast<FunctionType>(
       cast<PointerType>(MulAdd->getType())->getElementType());
-  for (auto i = 0; i < 3; ++i) {
+  for (unsigned i = 0; i < args.size(); ++i) {
     auto argSize = MulAddTy->getParamType(i)->getScalarSizeInBits();
     if (args[i]->getType()->getScalarSizeInBits() > argSize) {
       auto argOrig = args[i];

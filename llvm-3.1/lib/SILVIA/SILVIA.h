@@ -349,6 +349,11 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
 
   // Build tuples of SIMDFactor instructions that can be mapped to the
   // same SIMD DSP.
+  struct ToReplace {
+    SmallVector<SILVIA::Candidate, 4> tuple;
+    SmallVector<Value *, 4> packed;
+  };
+  SmallVector<ToReplace, 8> toReplace;
   while (!candidateInsts.empty()) {
     SmallVector<SILVIA::Candidate, 4> instTuple;
     Instruction *lastDef = nullptr;
@@ -424,15 +429,28 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
                  << instTuple.size() << " elements.\n");
 
     IRBuilder<> builder(insertBefore);
-    for (unsigned i = 0; i < instTuple.size(); ++i) {
-      std::string origName = instTuple[i].outInst->getName();
-      auto packedInst = builder.CreateExtractValue(pack, i);
-      instTuple[i].outInst->replaceAllUsesWith(packedInst);
-      instTuple[i].outInst->eraseFromParent();
-      packedInst->setName(origName);
+    ToReplace TR;
+    for (auto candidate : instTuple) {
+      TR.packed.push_back(
+          builder.CreateExtractValue(pack, TR.packed.size()));
     }
+    TR.tuple = instTuple;
 
+    toReplace.push_back(TR);
     modified = true;
+  }
+
+  for (auto TR : toReplace) {
+    for (unsigned i = 0; i < TR.tuple.size(); ++i)
+      TR.tuple[i].outInst->replaceAllUsesWith(TR.packed[i]);
+  }
+
+  for (auto TR : toReplace) {
+    for (unsigned i = 0; i < TR.tuple.size(); ++i) {
+      std::string origName = TR.tuple[i].outInst->getName();
+      TR.tuple[i].outInst->eraseFromParent();
+      TR.packed[i]->setName(origName);
+    }
   }
 
   return modified;

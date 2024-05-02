@@ -91,11 +91,11 @@ namespace eval SILVIA {
 				}
 				foreach dir "syn impl" {
 					set name "_simd_${op}_${factor}"
-					foreach f [glob -nocomplain ${project_path}/${solution_name}/${dir}/verilog/*${name}.v] {
+					foreach f [glob -nocomplain ${project_path}/${solution_name}/${dir}/verilog/*${name}*.v] {
 						set fbasename [file tail $f]
-						if {[regexp "^(.*)${name}\.v\$" $fbasename -> prefix]} {
+						if {[regexp "^(.*)${name}(.*)\.v\$" $fbasename -> prefix suffix]} {
 							file copy -force ${ROOT}/template/${op}/${op}.v $f
-							exec sh -c "sed -i 's/${name}/${prefix}${name}/g' $f"
+							exec sh -c "sed -i 's/${name}/${prefix}${name}${suffix}/g' $f"
 						}
 					}
 				}

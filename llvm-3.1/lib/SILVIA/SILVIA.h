@@ -32,6 +32,23 @@ struct SILVIA : public BasicBlockPass {
     AU.addRequired<AliasAnalysis>();
   }
 
+  bool doInitialization(Module &M) override {
+#ifdef DEBUG
+    packedTuples = 0;
+    packedCandidates = 0;
+#endif /* DEBUG */
+    return false;
+  }
+
+  bool doFinalization(Module &M) override {
+#ifdef DEBUG
+    if (packedTuples > 0)
+      dbgs() << "SILVIA::doFinalization: packed " << packedTuples << " tuples ("
+             << packedCandidates << " candidates).\n";
+#endif /* DEBUG */
+    return false;
+  }
+
   static Value *getUnextendedValue(Value *V);
   static int getExtOpcode(Instruction *I);
 
@@ -60,6 +77,10 @@ struct SILVIA : public BasicBlockPass {
   }
 
   AliasAnalysis *AA;
+#ifdef DEBUG
+  unsigned long packedTuples;
+  unsigned long packedCandidates;
+#endif /* DEBUG */
 };
 
 bool dependsOn(Instruction *inst0, Instruction *inst1) {
@@ -425,14 +446,17 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
     if (!pack)
       continue;
 
-    DEBUG(dbgs() << "SILVIA::runOnBasicBlock: packed a tuple of "
-                 << instTuple.size() << " elements.\n");
+#ifdef DEBUG
+    packedTuples++;
+    packedCandidates += instTuple.size();
+    dbgs() << "SILVIA::runOnBasicBlock: packed a tuple of " << instTuple.size()
+           << " elements.\n";
+#endif /* DEBUG */
 
     IRBuilder<> builder(insertBefore);
     ToReplace TR;
     for (auto candidate : instTuple) {
-      TR.packed.push_back(
-          builder.CreateExtractValue(pack, TR.packed.size()));
+      TR.packed.push_back(builder.CreateExtractValue(pack, TR.packed.size()));
     }
     TR.tuple = instTuple;
 

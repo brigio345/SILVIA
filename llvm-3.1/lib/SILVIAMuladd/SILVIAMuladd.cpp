@@ -25,6 +25,23 @@ struct SILVIAMuladd : public SILVIA {
 
   bool runOnBasicBlock(BasicBlock &BB) override;
 
+  bool doInitialization(Module &M) override {
+#ifdef DEBUG
+    packedTrees = 0;
+    packedLeaves = 0;
+#endif /* DEBUG */
+    return false;
+  }
+
+  bool doFinalization(Module &M) override {
+#ifdef DEBUG
+    if (packedTrees > 0)
+      dbgs() << "SILVIAMuladd::doFinalization: packed " << packedTrees
+             << " trees (" << packedLeaves << " leaves).\n";
+#endif /* DEBUG */
+    return false;
+  }
+
   std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) override;
   bool isCandidateCompatibleWithTuple(
       SILVIA::Candidate &candidate,
@@ -36,6 +53,10 @@ struct SILVIAMuladd : public SILVIA {
   Function *MulAdd;
   Function *ExtractProdsSign;
   Function *ExtractProdsUnsign;
+#ifdef DEBUG
+  unsigned long packedTrees;
+  unsigned long packedLeaves;
+#endif /* DEBUG */
 };
 
 char SILVIAMuladd::ID = 0;
@@ -454,6 +475,11 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
     for (auto endOfChain : endsOfChain)
       InlineFunction(endOfChain, IFI);
   }
+
+#ifdef DEBUG
+  packedTrees += 2;
+  packedLeaves += (2 * leavesPacks.size());
+#endif /* DEBUG */
 
   return rootStruct;
 }

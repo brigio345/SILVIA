@@ -172,7 +172,7 @@ std::list<SILVIA::Candidate> SILVIAMuladd::getCandidates(BasicBlock &BB) {
       DEBUG(if (muls > 0) dbgs()
             << "SILVIAMuladd::getCandidates: found a tree with " << muls
             << " muls (" << validMuls << " valid).\n");
-      if (validMuls > 0)
+      if (validMuls > 1)
         trees.push_back(tree);
     }
   }

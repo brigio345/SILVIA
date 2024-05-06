@@ -4,80 +4,80 @@ target triple = "fpga64-xilinx-none"
 
 @empty_0 = internal unnamed_addr constant [1 x i8] zeroinitializer
 
-define internal fastcc { i18, i18 } @_simd_mul_signed_2(i9 %a_val, i9 %d_val, i9 %b_val) nounwind readnone noinline {
+define internal fastcc { i16, i16 } @_simd_mul_signed_2(i9 %a_val, i9 %d_val, i9 %b_val) nounwind readnone noinline {
 entry:
   call void (...)* @_ssdm_op_SpecPipeline(i32 1, i32 0, i32 0, i32 0, [1 x i8]* @empty_0)
   call void (...)* @_ssdm_op_SpecLatency(i64 0, i64 0, [1 x i8]* @empty_0)
   %b_val_read = call i9 @_ssdm_op_Read.ap_auto.i9(i9 %b_val) nounwind, !bitwidth !1548
   %d_val_read = call i9 @_ssdm_op_Read.ap_auto.i9(i9 %d_val) nounwind, !bitwidth !1548
   %a_val_read = call i9 @_ssdm_op_Read.ap_auto.i9(i9 %a_val) nounwind, !bitwidth !1548
-  %A = call i27 @_ssdm_op_BitConcatenate.i27.i9.i18(i9 %a_val_read, i18 0), !bitwidth !1644
-  %sext_ln25_1 = sext i9 %d_val_read to i27, !bitwidth !1644
-  %add_ln25 = add nsw i27 %A, %sext_ln25_1, !bitwidth !1644
-  %sext_ln25_2 = sext i27 %add_ln25 to i36, !bitwidth !1647
-  %sext_ln25_3 = sext i9 %b_val_read to i36, !bitwidth !1647
-  %mul_ln25 = mul i36 %sext_ln25_2, %sext_ln25_3, !bitwidth !1647
-  %trunc_ln13 = trunc i36 %mul_ln25 to i18, !bitwidth !1600
-  %tmp = call i1 @_ssdm_op_BitSelect.i1.i36.i32(i36 %mul_ln25, i32 17), !bitwidth !1652
-  %zext_ln14 = zext i1 %tmp to i18, !bitwidth !1653
-  %trunc_ln = call i18 @_ssdm_op_PartSelect.i18.i36.i32.i32(i36 %mul_ln25, i32 18, i32 35), !bitwidth !1600
-  %add_ln14 = add i18 %trunc_ln, %zext_ln14, !bitwidth !1600
-  %mrv = insertvalue { i18, i18 } undef, i18 %add_ln14, 0, !bitwidth !1599
-  %mrv_1 = insertvalue { i18, i18 } %mrv, i18 %trunc_ln13, 1, !bitwidth !1599
-  ret { i18, i18 } %mrv_1, !bitwidth !1599
+  %A = call i25 @_ssdm_op_BitConcatenate.i25.i9.i16(i9 %a_val_read, i16 0), !bitwidth !1644
+  %sext_ln25_1 = sext i9 %d_val_read to i25, !bitwidth !1644
+  %add_ln25 = add nsw i25 %A, %sext_ln25_1, !bitwidth !1644
+  %sext_ln25_2 = sext i25 %add_ln25 to i32, !bitwidth !1552
+  %sext_ln25_3 = sext i9 %b_val_read to i32, !bitwidth !1552
+  %mul_ln25 = mul i32 %sext_ln25_2, %sext_ln25_3, !bitwidth !1552
+  %trunc_ln13 = trunc i32 %mul_ln25 to i16, !bitwidth !1600
+  %tmp = call i1 @_ssdm_op_BitSelect.i1.i32.i32(i32 %mul_ln25, i32 15), !bitwidth !1652
+  %zext_ln14 = zext i1 %tmp to i16, !bitwidth !1653
+  %trunc_ln = call i16 @_ssdm_op_PartSelect.i16.i32.i32.i32(i32 %mul_ln25, i32 16, i32 31), !bitwidth !1600
+  %add_ln14 = add i16 %trunc_ln, %zext_ln14, !bitwidth !1600
+  %mrv = insertvalue { i16, i16 } undef, i16 %add_ln14, 0, !bitwidth !1599
+  %mrv_1 = insertvalue { i16, i16 } %mrv, i16 %trunc_ln13, 1, !bitwidth !1599
+  ret { i16, i16 } %mrv_1, !bitwidth !1599
 }
 
-define internal fastcc { i18, i18 } @_simd_mul_signed_inline_2(i9 %a_val, i9 %d_val, i9 %b_val) nounwind readnone {
+define internal fastcc { i16, i16 } @_simd_mul_signed_inline_2(i9 %a_val, i9 %d_val, i9 %b_val) nounwind readnone {
 entry:
-  %A = call i27 @_ssdm_op_BitConcatenate.i27.i9.i18(i9 %a_val, i18 0), !bitwidth !1644
-  %sext_ln25_1 = sext i9 %d_val to i27, !bitwidth !1644
-  %add_ln25 = add nsw i27 %A, %sext_ln25_1, !bitwidth !1644
-  %sext_ln25_2 = sext i27 %add_ln25 to i36, !bitwidth !1647
-  %sext_ln25_3 = sext i9 %b_val to i36, !bitwidth !1647
-  %mul_ln25 = mul i36 %sext_ln25_2, %sext_ln25_3, !bitwidth !1647
-  %trunc_ln13 = trunc i36 %mul_ln25 to i18, !bitwidth !1600
-  %tmp = call i1 @_ssdm_op_BitSelect.i1.i36.i32(i36 %mul_ln25, i32 17), !bitwidth !1652
-  %zext_ln14 = zext i1 %tmp to i18, !bitwidth !1653
-  %trunc_ln = call i18 @_ssdm_op_PartSelect.i18.i36.i32.i32(i36 %mul_ln25, i32 18, i32 35), !bitwidth !1600
-  %add_ln14 = add i18 %trunc_ln, %zext_ln14, !bitwidth !1600
-  %mrv = insertvalue { i18, i18 } undef, i18 %add_ln14, 0, !bitwidth !1599
-  %mrv_1 = insertvalue { i18, i18 } %mrv, i18 %trunc_ln13, 1, !bitwidth !1599
-  ret { i18, i18 } %mrv_1, !bitwidth !1599
+  %A = call i25 @_ssdm_op_BitConcatenate.i25.i9.i16(i9 %a_val, i16 0), !bitwidth !1644
+  %sext_ln25_1 = sext i9 %d_val to i25, !bitwidth !1644
+  %add_ln25 = add nsw i25 %A, %sext_ln25_1, !bitwidth !1644
+  %sext_ln25_2 = sext i25 %add_ln25 to i32, !bitwidth !1552
+  %sext_ln25_3 = sext i9 %b_val to i32, !bitwidth !1552
+  %mul_ln25 = mul i32 %sext_ln25_2, %sext_ln25_3, !bitwidth !1552
+  %trunc_ln13 = trunc i32 %mul_ln25 to i16, !bitwidth !1600
+  %tmp = call i1 @_ssdm_op_BitSelect.i1.i32.i32(i32 %mul_ln25, i32 17), !bitwidth !1652
+  %zext_ln14 = zext i1 %tmp to i16, !bitwidth !1653
+  %trunc_ln = call i16 @_ssdm_op_PartSelect.i16.i32.i32.i32(i32 %mul_ln25, i32 16, i32 31), !bitwidth !1600
+  %add_ln14 = add i16 %trunc_ln, %zext_ln14, !bitwidth !1600
+  %mrv = insertvalue { i16, i16 } undef, i16 %add_ln14, 0, !bitwidth !1599
+  %mrv_1 = insertvalue { i16, i16 } %mrv, i16 %trunc_ln13, 1, !bitwidth !1599
+  ret { i16, i16 } %mrv_1, !bitwidth !1599
 }
 
-define internal fastcc { i18, i18 } @_simd_mul_unsigned_2(i9 %a_val, i9 %d_val, i9 %b_val) nounwind readnone noinline {
+define internal fastcc { i16, i16 } @_simd_mul_unsigned_2(i9 %a_val, i9 %d_val, i9 %b_val) nounwind readnone noinline {
 entry:
   call void (...)* @_ssdm_op_SpecPipeline(i32 1, i32 0, i32 0, i32 0, [1 x i8]* @empty_0)
   call void (...)* @_ssdm_op_SpecLatency(i64 0, i64 0, [1 x i8]* @empty_0)
   %b_val_read = call i9 @_ssdm_op_Read.ap_auto.i9(i9 %b_val) nounwind, !bitwidth !1548
   %d_val_read = call i9 @_ssdm_op_Read.ap_auto.i9(i9 %d_val) nounwind, !bitwidth !1548
   %a_val_read = call i9 @_ssdm_op_Read.ap_auto.i9(i9 %a_val) nounwind, !bitwidth !1548
-  %A = call i27 @_ssdm_op_BitConcatenate.i27.i9.i18(i9 %a_val_read, i18 0), !bitwidth !1644
-  %sext_ln25_1 = sext i9 %d_val_read to i27, !bitwidth !1644
-  %add_ln25 = add nsw i27 %A, %sext_ln25_1, !bitwidth !1644
-  %sext_ln25_2 = sext i27 %add_ln25 to i36, !bitwidth !1647
-  %sext_ln25_3 = sext i9 %b_val_read to i36, !bitwidth !1647
-  %mul_ln25 = mul i36 %sext_ln25_2, %sext_ln25_3, !bitwidth !1647
-  %trunc_ln13 = trunc i36 %mul_ln25 to i18, !bitwidth !1600
-  %trunc_ln = call i18 @_ssdm_op_PartSelect.i18.i36.i32.i32(i36 %mul_ln25, i32 18, i32 35), !bitwidth !1600
-  %mrv = insertvalue { i18, i18 } undef, i18 %trunc_ln, 0, !bitwidth !1599
-  %mrv_1 = insertvalue { i18, i18 } %mrv, i18 %trunc_ln13, 1, !bitwidth !1599
-  ret { i18, i18 } %mrv_1, !bitwidth !1599
+  %A = call i25 @_ssdm_op_BitConcatenate.i25.i9.i16(i9 %a_val_read, i16 0), !bitwidth !1644
+  %sext_ln25_1 = sext i9 %d_val_read to i25, !bitwidth !1644
+  %add_ln25 = add nsw i25 %A, %sext_ln25_1, !bitwidth !1644
+  %sext_ln25_2 = sext i25 %add_ln25 to i32, !bitwidth !1552
+  %sext_ln25_3 = sext i9 %b_val_read to i32, !bitwidth !1552
+  %mul_ln25 = mul i32 %sext_ln25_2, %sext_ln25_3, !bitwidth !1552
+  %trunc_ln13 = trunc i32 %mul_ln25 to i16, !bitwidth !1600
+  %trunc_ln = call i16 @_ssdm_op_PartSelect.i16.i32.i32.i32(i32 %mul_ln25, i32 16, i32 31), !bitwidth !1600
+  %mrv = insertvalue { i16, i16 } undef, i16 %trunc_ln, 0, !bitwidth !1599
+  %mrv_1 = insertvalue { i16, i16 } %mrv, i16 %trunc_ln13, 1, !bitwidth !1599
+  ret { i16, i16 } %mrv_1, !bitwidth !1599
 }
 
-define internal fastcc { i18, i18 } @_simd_mul_unsigned_inline_2(i9 %a_val, i9 %d_val, i9 %b_val) nounwind readnone {
+define internal fastcc { i16, i16 } @_simd_mul_unsigned_inline_2(i9 %a_val, i9 %d_val, i9 %b_val) nounwind readnone {
 entry:
-  %A = call i27 @_ssdm_op_BitConcatenate.i27.i9.i18(i9 %a_val, i18 0), !bitwidth !1644
-  %sext_ln25_1 = sext i9 %d_val to i27, !bitwidth !1644
-  %add_ln25 = add nsw i27 %A, %sext_ln25_1, !bitwidth !1644
-  %sext_ln25_2 = sext i27 %add_ln25 to i36, !bitwidth !1647
-  %sext_ln25_3 = sext i9 %b_val to i36, !bitwidth !1647
-  %mul_ln25 = mul i36 %sext_ln25_2, %sext_ln25_3, !bitwidth !1647
-  %trunc_ln13 = trunc i36 %mul_ln25 to i18, !bitwidth !1600
-  %trunc_ln = call i18 @_ssdm_op_PartSelect.i18.i36.i32.i32(i36 %mul_ln25, i32 18, i32 35), !bitwidth !1600
-  %mrv = insertvalue { i18, i18 } undef, i18 %trunc_ln, 0, !bitwidth !1599
-  %mrv_1 = insertvalue { i18, i18 } %mrv, i18 %trunc_ln13, 1, !bitwidth !1599
-  ret { i18, i18 } %mrv_1, !bitwidth !1599
+  %A = call i25 @_ssdm_op_BitConcatenate.i25.i9.i16(i9 %a_val, i16 0), !bitwidth !1644
+  %sext_ln25_1 = sext i9 %d_val to i25, !bitwidth !1644
+  %add_ln25 = add nsw i25 %A, %sext_ln25_1, !bitwidth !1644
+  %sext_ln25_2 = sext i25 %add_ln25 to i32, !bitwidth !1552
+  %sext_ln25_3 = sext i9 %b_val to i32, !bitwidth !1552
+  %mul_ln25 = mul i32 %sext_ln25_2, %sext_ln25_3, !bitwidth !1552
+  %trunc_ln13 = trunc i32 %mul_ln25 to i16, !bitwidth !1600
+  %trunc_ln = call i16 @_ssdm_op_PartSelect.i16.i32.i32.i32(i32 %mul_ln25, i32 16, i32 31), !bitwidth !1600
+  %mrv = insertvalue { i16, i16 } undef, i16 %trunc_ln, 0, !bitwidth !1599
+  %mrv_1 = insertvalue { i16, i16 } %mrv, i16 %trunc_ln13, 1, !bitwidth !1599
+  ret { i16, i16 } %mrv_1, !bitwidth !1599
 }
 
 define weak void @_ssdm_op_SpecPipeline(...) nounwind {
@@ -90,9 +90,9 @@ entry:
   ret void
 }
 
-define weak i36 @_ssdm_op_Read.ap_auto.i36(i36) {
+define weak i32 @_ssdm_op_Read.ap_auto.i32(i32) {
 entry:
-  ret i36 %0
+  ret i32 %0
 }
 
 define weak i9 @_ssdm_op_Read.ap_auto.i9(i9) {
@@ -100,39 +100,36 @@ entry:
   ret i9 %0
 }
 
-define weak i1 @_ssdm_op_BitSelect.i1.i36.i32(i36, i32) nounwind readnone {
+define weak i1 @_ssdm_op_BitSelect.i1.i32.i32(i32, i32) nounwind readnone {
 entry:
-  %empty = zext i32 %1 to i36
-  %empty_7 = shl i36 1, %empty
-  %empty_8 = and i36 %0, %empty_7
-  %empty_9 = icmp ne i36 %empty_8, 0
+  %empty_7 = shl i32 1, %1
+  %empty_8 = and i32 %0, %empty_7
+  %empty_9 = icmp ne i32 %empty_8, 0
   ret i1 %empty_9
 }
 
-define weak i27 @_ssdm_op_BitConcatenate.i27.i9.i18(i9, i18) nounwind readnone {
+define weak i25 @_ssdm_op_BitConcatenate.i25.i9.i16(i9, i16) nounwind readnone {
 entry:
-  %empty = zext i9 %0 to i27
-  %empty_10 = zext i18 %1 to i27
-  %empty_11 = shl i27 %empty, 18
-  %empty_12 = or i27 %empty_11, %empty_10
-  ret i27 %empty_12
+  %empty = zext i9 %0 to i25
+  %empty_10 = zext i16 %1 to i25
+  %empty_11 = shl i25 %empty, 16
+  %empty_12 = or i25 %empty_11, %empty_10
+  ret i25 %empty_12
 }
 
-define weak i18 @_ssdm_op_PartSelect.i18.i36.i32.i32(i36, i32, i32) nounwind readnone {
+define weak i16 @_ssdm_op_PartSelect.i16.i32.i32.i32(i32, i32, i32) nounwind readnone {
 entry:
-  %empty = call i36 @llvm.part.select.i36(i36 %0, i32 %1, i32 %2)
-  %empty_6 = trunc i36 %empty to i18
-  ret i18 %empty_6
+  %empty = call i32 @llvm.part.select.i32(i32 %0, i32 %1, i32 %2)
+  %empty_6 = trunc i32 %empty to i16
+  ret i16 %empty_6
 }
 
-declare i36 @llvm.part.select.i36(i36, i32, i32) nounwind readnone
+declare i32 @llvm.part.select.i32(i32, i32, i32) nounwind readnone
 
 !1548 = metadata !{i32 9, i32 9, i32 0, i32 2}
-!1552 = metadata !{i32 36, i32 36, i32 0, i32 2}
-!1561 = metadata !{i32 36, i32 36, i32 0, i32 2}
+!1552 = metadata !{i32 32, i32 32, i32 0, i32 2}
 !1599 = metadata !{i32 0, i32 0, i32 0, i32 2}
-!1600 = metadata !{i32 18, i32 18, i32 0, i32 2}
-!1644 = metadata !{i32 27, i32 27, i32 0, i32 1}
-!1647 = metadata !{i32 36, i32 36, i32 0, i32 2}
+!1600 = metadata !{i32 16, i32 16, i32 0, i32 2}
+!1644 = metadata !{i32 25, i32 25, i32 0, i32 1}
 !1652 = metadata !{i32 1, i32 1, i32 0, i32 2}
-!1653 = metadata !{i32 18, i32 18, i32 0, i32 0}
+!1653 = metadata !{i32 16, i32 16, i32 0, i32 0}

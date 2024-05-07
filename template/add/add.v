@@ -7,44 +7,22 @@
 (* use_mult = "none" *)
 (* dont_touch = "true" *)
 module _simd_add_4 (
-        ap_clk,
-        ap_rst,
-        a0_val,
-        b0_val,
-        a1_val,
-        b1_val,
-        a2_val,
-        b2_val,
-        a3_val,
-        b3_val,
-        ap_return_0,
-        ap_return_1,
-        ap_return_2,
-        ap_return_3,
-        ap_ce
+    input   ap_clk,
+    input   ap_rst,
+    input  [11:0] a0_val,
+    input  [11:0] b0_val,
+    input  [11:0] a1_val,
+    input  [11:0] b1_val,
+    input  [11:0] a2_val,
+    input  [11:0] b2_val,
+    input  [11:0] a3_val,
+    input  [11:0] b3_val,
+    output reg [11:0] ap_return_0,
+    output reg [11:0] ap_return_1,
+    output reg [11:0] ap_return_2,
+    output reg [11:0] ap_return_3,
+    input   ap_ce = 1
 );
-
-
-input   ap_clk;
-input   ap_rst;
-input  [11:0] a0_val;
-input  [11:0] b0_val;
-input  [11:0] a1_val;
-input  [11:0] b1_val;
-input  [11:0] a2_val;
-input  [11:0] b2_val;
-input  [11:0] a3_val;
-input  [11:0] b3_val;
-output  [11:0] ap_return_0;
-output  [11:0] ap_return_1;
-output  [11:0] ap_return_2;
-output  [11:0] ap_return_3;
-input   ap_ce;
-
-reg[11:0] ap_return_0;
-reg[11:0] ap_return_1;
-reg[11:0] ap_return_2;
-reg[11:0] ap_return_3;
 
 wire   [11:0] add_ln25_fu_80_p2;
 reg   [11:0] add_ln25_reg_124;
@@ -135,30 +113,16 @@ endmodule //_simd_add_4
 (* use_mult = "none" *)
 (* dont_touch = "true" *)
 module _simd_add_2 (
-        ap_clk,
-        ap_rst,
-        a0_val,
-        b0_val,
-        a1_val,
-        b1_val,
-        ap_return_0,
-        ap_return_1,
-        ap_ce
+    input   ap_clk,
+    input   ap_rst,
+    input  [23:0] a0_val,
+    input  [23:0] b0_val,
+    input  [23:0] a1_val,
+    input  [23:0] b1_val,
+    output reg [23:0] ap_return_0,
+    output reg [23:0] ap_return_1,
+    input   ap_ce = 1
 );
-
-
-input   ap_clk;
-input   ap_rst;
-input  [23:0] a0_val;
-input  [23:0] b0_val;
-input  [23:0] a1_val;
-input  [23:0] b1_val;
-output  [23:0] ap_return_0;
-output  [23:0] ap_return_1;
-input   ap_ce;
-
-reg[23:0] ap_return_0;
-reg[23:0] ap_return_1;
 
 wire   [23:0] add_ln25_fu_48_p2;
 reg   [23:0] add_ln25_reg_70;

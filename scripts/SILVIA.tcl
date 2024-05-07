@@ -36,7 +36,10 @@ namespace eval SILVIA {
 		while {[file exist ${project_path}/${solution_name}_FE/.autopilot/db/dut.hcp] == 0} {
 			after 3000
 		}
-		exec unzip -o -d dut ${project_path}/${solution_name}_FE/.autopilot/db/dut.hcp
+		set db_path ${project_path}/${solution_name}/.autopilot/db
+		set dut_path ${db_path}/dut
+		file mkdir ${dut_path}
+		exec unzip -o -d ${dut_path} ${project_path}/${solution_name}_FE/.autopilot/db/dut.hcp
 		set ::env(LD_LIBRARY_PATH) "${LLVM_ROOT}/lib/:$::env(LD_LIBRARY_PATH)"
 		if {${DEBUG} == 1} {
 			file delete ${DEBUG_FILE}
@@ -51,7 +54,7 @@ namespace eval SILVIA {
 			if {${op} == "add" && [dict exist ${pass} FACTOR]} {
 				set factor [dict get ${pass} FACTOR]
 			}
-			exec ${LLVM_ROOT}/bin/llvm-link ${ROOT}/template/${op}/${op}.ll dut/a.o.3.bc -o dut/a.o.3.bc
+			exec ${LLVM_ROOT}/bin/llvm-link ${ROOT}/template/${op}/${op}.ll ${dut_path}/a.o.3.bc -o ${dut_path}/a.o.3.bc
 			set opt_cmd "${LLVM_ROOT}/bin/opt"
 			if {${DEBUG} == 1} {
 				append opt_cmd " -debug"
@@ -67,16 +70,16 @@ namespace eval SILVIA {
 			if {${op} == "muladd" && [dict exist ${pass} MAX_CHAIN_LEN]} {
 				append opt_cmd " -silvia-muladd-max-chain-len=[dict get ${pass} MAX_CHAIN_LEN]"
 			}
-			append opt_cmd " -dce dut/a.o.3.bc -o dut/a.o.3.bc"
+			append opt_cmd " -dce ${dut_path}/a.o.3.bc -o ${dut_path}/a.o.3.bc"
 			if {${DEBUG} == 1} {
 				append opt_cmd " |& cat | tee -a ${DEBUG_FILE}"
 			}
 
 			eval exec ${opt_cmd}
 		}
-		exec zip -rj dut.hcp dut
+		exec zip -rj ${db_path}/dut.hcp ${dut_path}
 		open_solution ${solution_name}
-		read_checkpoint dut.hcp
+		read_checkpoint ${db_path}/dut.hcp
 		::csynth_design -hw_syn
 	
 		foreach pass ${PASSES} {

@@ -2,9 +2,9 @@
 #include <random>
 
 #define DEBUG
-#define M 8
-#define N 8
-#define P 8
+const unsigned M = 8;
+const unsigned N = 8;
+const unsigned P = 8;
 #define TESTS 10
 
 // a: mxn; b: nxp; c: mxp
@@ -51,10 +51,13 @@ void matrix_multiplication_wino(char a[M * N], char b[N * P], char c[M * P]) {
 #pragma HLS interface mode = ap_memory port = a
 #pragma HLS interface mode = ap_memory port = b
 #pragma HLS interface mode = ap_memory port = c
+
+#pragma HLS array_partition variable = a type = cyclic factor = N
+#pragma HLS array_partition variable = b type = block factor = N
   for (int i = 0; i < M; ++i) {
     char epsilon = compute_epsilon_nu(&(a[i * N]));
     for (int k = 0; k < P; ++k) {
-#pragma HLS pipeline
+#pragma HLS pipeline II = 1
       char b_tmp[N];
       for (int j = 0; j < N; ++j)
         b_tmp[j] = b[j * P + k];

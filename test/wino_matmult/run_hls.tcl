@@ -1,4 +1,11 @@
-source ../../scripts/csynth_design_simd.tcl
+set SILVIA_ROOT "../.."
+source ${SILVIA_ROOT}/scripts/SILVIA.tcl
+set SILVIA::ROOT ${SILVIA_ROOT}
+set SILVIA::LLVM_ROOT ${SILVIA_ROOT}/llvm-project/install
+set SILVIA::DEBUG 1
+set SILVIA::PASSES [list \
+	[dict create OP "add" FACTOR 4] \
+	[dict create OP "add" FACTOR 2]]
 
 set PROJ_NAME "proj"
 
@@ -16,7 +23,7 @@ set_part "xczu3eg-ubva530-2L-e"
 create_clock -period "300MHz"
 
 csim_design
-csynth_design_simd "add" 4 ../../llvm-3.1/llvm/install ../..
+SILVIA::csynth_design
 cosim_design
 
 exit

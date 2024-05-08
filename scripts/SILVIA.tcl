@@ -92,13 +92,21 @@ namespace eval SILVIA {
 				if {[dict exist ${pass} FACTOR]} {
 					set factor [dict get ${pass} FACTOR]
 				}
-				foreach dir "syn impl" {
-					set name "_simd_${op}_${factor}"
-					foreach f [glob -nocomplain ${project_path}/${solution_name}/${dir}/verilog/*${name}*.v] {
-						set fbasename [file tail $f]
-						if {[regexp "^(.*)${name}(.*)\.v\$" $fbasename -> prefix suffix]} {
-							file copy -force ${ROOT}/template/${op}/${op}.v $f
-							exec sh -c "sed -i 's/${name}/${prefix}${name}${suffix}/g' $f"
+				foreach lang "verilog vhdl" {
+					foreach dir "syn impl" {
+						if {${lang} == "verilog"} {
+							set extension "v"
+						} else {
+							set extension "vhd"
+						}
+						set name "_simd_${op}_${factor}"
+						foreach f [glob -nocomplain ${project_path}/${solution_name}/${dir}/${lang}/*${name}*.${extension}] {
+							set fbasename [file tail $f]
+							if {[regexp "^(.*)${name}(.*)\.${extension}\$" $fbasename -> prefix suffix]} {
+								file copy -force ${ROOT}/template/${op}/${op}_${factor}.${extension} $f
+								exec sh -c "sed -i 's/\{\{prefix\}\}/${prefix}/g' $f"
+								exec sh -c "sed -i 's/\{\{suffix\}\}/${suffix}/g' $f"
+							}
 						}
 					}
 				}

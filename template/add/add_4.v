@@ -9,7 +9,6 @@
 (* use_dsp = "simd" *)
 (* use_simd = "four12" *)
 (* use_mult = "none" *)
-(* dont_touch = "true" *)
 module {{prefix}}_simd_add_4{{suffix}} (
     input   ap_clk,
     input   ap_rst,

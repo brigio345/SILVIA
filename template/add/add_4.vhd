@@ -29,11 +29,9 @@ port (
     attribute use_dsp : string;
     attribute use_simd : string;
     attribute use_mult : string;
-    attribute dont_touch : string;
     attribute use_dsp of {{prefix}}_simd_add_4{{suffix}}: entity is "simd";
     attribute use_simd of {{prefix}}_simd_add_4{{suffix}}: entity is "four12";
     attribute use_mult of {{prefix}}_simd_add_4{{suffix}}: entity is "none";
-    attribute dont_touch of {{prefix}}_simd_add_4{{suffix}}: entity is "true";
 end;
 
 architecture behav of {{prefix}}_simd_add_4{{suffix}} is 

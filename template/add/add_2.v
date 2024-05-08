@@ -9,7 +9,6 @@
 (* use_dsp = "simd" *)
 (* use_simd = "two24" *)
 (* use_mult = "none" *)
-(* dont_touch = "true" *)
 module {{prefix}}_simd_add_2{{suffix}} (
     input   ap_clk,
     input   ap_rst,

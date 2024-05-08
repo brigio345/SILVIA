@@ -9,7 +9,7 @@
 #include <cassert>
 #include <list>
 
-#include "../SILVIA/SILVIA.h"
+#include "SILVIA/SILVIA.h"
 
 using namespace llvm;
 

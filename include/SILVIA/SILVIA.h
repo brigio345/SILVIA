@@ -374,6 +374,30 @@ bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
   return true;
 }
 
+void getDefsUsesInterval(SmallVector<SILVIA::Candidate, 4> &tuple,
+                         Instruction *lastDef, Instruction *firstUse) {
+  lastDef = nullptr;
+  firstUse = nullptr;
+
+  if (tuple.size() < 1)
+    return;
+
+  DenseMap<Instruction *, int> instMap;
+  getInstMap(tuple[0].outInst->getParent(), instMap);
+  for (auto candidate : tuple) {
+    Instruction *lastDefCand = getLastOperandDef(candidate.outInst);
+    Instruction *firstUseCand = getFirstValueUse(candidate.outInst);
+
+    if ((!lastDef) ||
+        (lastDefCand && (instMap[lastDef] < instMap[lastDefCand])))
+      lastDef = lastDefCand;
+
+    if ((!firstUse) ||
+        (firstUseCand && (instMap[firstUseCand] < instMap[firstUse])))
+      firstUse = firstUseCand;
+  }
+}
+
 bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   Function *F = BB.getParent();
   DEBUG(dbgs() << "SILVIA::runOnBasicBlock: called on " << F->getName() << " @ "
@@ -395,28 +419,27 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
 
   bool modified = false;
 
-  candidateInsts.reverse();
-  for (auto &candidateInstCurr : candidateInsts)
-    modified |= moveDefsASAP(candidateInstCurr.outInst);
-  candidateInsts.reverse();
-  for (auto &candidateInstCurr : candidateInsts)
-    modified |= moveUsesALAP(candidateInstCurr.outInst);
-
   // Build tuples of SIMDFactor instructions that can be mapped to the
   // same SIMD DSP.
   while (!candidateInsts.empty()) {
     SmallVector<SILVIA::Candidate, 4> instTuple;
+
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
-    DenseMap<Instruction *, int> instMap;
-    getInstMap(&BB, instMap);
     for (auto CI = candidateInsts.begin(), CE = candidateInsts.end();
          CI != CE;) {
       SILVIA::Candidate candidateInstCurr = *CI;
+
+      modified |= moveDefsASAP(candidateInstCurr.outInst);
+      modified |= moveUsesALAP(candidateInstCurr.outInst);
+
+      getDefsUsesInterval(instTuple, lastDef, firstUse);
       Instruction *lastDefCurr = getLastOperandDef(candidateInstCurr.outInst);
       Instruction *firstUseCurr = getFirstValueUse(candidateInstCurr.outInst);
 
+      DenseMap<Instruction *, int> instMap;
+      getInstMap(&BB, instMap);
       if ((!lastDefCurr) ||
           (lastDef && (instMap[lastDefCurr] < instMap[lastDef])))
         lastDefCurr = lastDef;
@@ -486,6 +509,13 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
     for (unsigned i = 0; i < instTuple.size(); ++i) {
       std::string origName = instTuple[i].outInst->getName();
       auto packedInst = builder.CreateExtractValue(pack, i);
+      for (auto candidate : candidateInsts) {
+        for (auto inVal : candidate.inVals) {
+          if (inVal == instTuple[i].outInst) {
+            inVal = packedInst;
+          }
+        }
+      }
       instTuple[i].outInst->replaceAllUsesWith(packedInst);
       instTuple[i].outInst->eraseFromParent();
       packedInst->setName(origName);

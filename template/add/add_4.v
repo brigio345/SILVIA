@@ -9,7 +9,7 @@
 (* use_dsp = "simd" *)
 (* use_simd = "four12" *)
 (* use_mult = "none" *)
-module {{prefix}}_simd_add_4{{suffix}} (
+module {{prefix}}_simd_{{instruction}}_4{{suffix}} (
     input   ap_clk,
     input   ap_rst,
     input  [11:0] a0_val,
@@ -101,12 +101,12 @@ always @ (*) begin
     end
 end
 
-assign add_ln25_fu_80_p2 = (b0_val + a0_val);
+assign add_ln25_fu_80_p2 = (a0_val {{operator}} b0_val);
 
-assign add_ln26_fu_86_p2 = (b1_val + a1_val);
+assign add_ln26_fu_86_p2 = (a1_val {{operator}} b1_val);
 
-assign add_ln27_fu_92_p2 = (b2_val + a2_val);
+assign add_ln27_fu_92_p2 = (a2_val {{operator}} b2_val);
 
-assign add_ln28_fu_98_p2 = (b3_val + a3_val);
+assign add_ln28_fu_98_p2 = (a3_val {{operator}} b3_val);
 
-endmodule //{{prefix}}_simd_add_4{{suffix}}
+endmodule //{{prefix}}_simd_{{instruction}}_4{{suffix}}

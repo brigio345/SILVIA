@@ -8,7 +8,7 @@ library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
-entity {{prefix}}_simd_add_4{{suffix}} is
+entity {{prefix}}_simd_{{instruction}}_4{{suffix}} is
 port (
     ap_clk : IN STD_LOGIC;
     ap_rst : IN STD_LOGIC;
@@ -29,12 +29,12 @@ port (
     attribute use_dsp : string;
     attribute use_simd : string;
     attribute use_mult : string;
-    attribute use_dsp of {{prefix}}_simd_add_4{{suffix}}: entity is "simd";
-    attribute use_simd of {{prefix}}_simd_add_4{{suffix}}: entity is "four12";
-    attribute use_mult of {{prefix}}_simd_add_4{{suffix}}: entity is "none";
+    attribute use_dsp of {{prefix}}_simd_{{instruction}}_4{{suffix}}: entity is "simd";
+    attribute use_simd of {{prefix}}_simd_{{instruction}}_4{{suffix}}: entity is "four12";
+    attribute use_mult of {{prefix}}_simd_{{instruction}}_4{{suffix}}: entity is "none";
 end;
 
-architecture behav of {{prefix}}_simd_add_4{{suffix}} is 
+architecture behav of {{prefix}}_simd_{{instruction}}_4{{suffix}} is 
     constant ap_const_logic_1 : STD_LOGIC := '1';
     constant ap_const_logic_0 : STD_LOGIC := '0';
     constant ap_const_boolean_1 : BOOLEAN := true;
@@ -85,10 +85,10 @@ begin
             end if;
         end if;
     end process;
-    add_ln25_fu_80_p2 <= std_logic_vector(unsigned(b0_val) + unsigned(a0_val));
-    add_ln26_fu_86_p2 <= std_logic_vector(unsigned(b1_val) + unsigned(a1_val));
-    add_ln27_fu_92_p2 <= std_logic_vector(unsigned(b2_val) + unsigned(a2_val));
-    add_ln28_fu_98_p2 <= std_logic_vector(unsigned(b3_val) + unsigned(a3_val));
+    add_ln25_fu_80_p2 <= std_logic_vector(unsigned(a0_val) {{operator}} unsigned(b0_val));
+    add_ln26_fu_86_p2 <= std_logic_vector(unsigned(a1_val) {{operator}} unsigned(b1_val));
+    add_ln27_fu_92_p2 <= std_logic_vector(unsigned(a2_val) {{operator}} unsigned(b2_val));
+    add_ln28_fu_98_p2 <= std_logic_vector(unsigned(a3_val) {{operator}} unsigned(b3_val));
         ap_block_pp0_stage0 <= not((ap_const_boolean_1 = ap_const_boolean_1));
         ap_block_pp0_stage0_11001 <= not((ap_const_boolean_1 = ap_const_boolean_1));
 

@@ -39,6 +39,11 @@ static cl::opt<unsigned int>
     SIMDFactor("silvia-add-simd-factor", cl::init(4), cl::Hidden,
                cl::desc("The amount of adds to pack to SIMD DSPs."));
 
+static cl::opt<std::string> SIMDOp(
+    "silvia-add-op", cl::init("add"), cl::Hidden,
+    cl::desc(
+        "The operation to pack to SIMD DSPs. Valid values are: add, sub."));
+
 static cl::opt<unsigned int> DSPWidth("silvia-add-dsp-width", cl::init(48),
                                       cl::Hidden,
                                       cl::desc("The DSP width in bits."));
@@ -49,8 +54,9 @@ std::list<SILVIA::Candidate> SILVIAAdd::getCandidates(BasicBlock &BB) {
 
   const auto addMaxWidth = (DSPWidth / SIMDFactor);
 
+  auto instTy = ((SIMDOp == "add") ? Instruction::Add : Instruction::Sub);
   for (auto &I : BB) {
-    if (I.getOpcode() != Instruction::Add)
+    if (I.getOpcode() != instTy)
       continue;
     if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1)))
       continue;
@@ -131,7 +137,10 @@ bool SILVIAAdd::runOnBasicBlock(BasicBlock &BB) {
 
   // Get the SIMD function
   Module *module = BB.getParent()->getParent();
-  SIMDFunc = module->getFunction("_simd_add_" + std::to_string(SIMDFactor));
+  dbgs() << "searcing for "
+         << "_simd_" + SIMDOp + "_" + std::to_string(SIMDFactor) << "\n";
+  SIMDFunc =
+      module->getFunction("_simd_" + SIMDOp + "_" + std::to_string(SIMDFactor));
   assert(SIMDFunc && "SIMD function not found");
 
   return SILVIA::runOnBasicBlock(BB);

@@ -50,6 +50,10 @@ namespace eval SILVIA {
 				continue
 			}
 			set op [dict get ${pass} OP]
+			set instruction "add"
+			if {[dict exist ${pass} INST]} {
+				set instruction [dict get ${pass} INST]
+			}
 			set factor 2
 			if {${op} == "add" && [dict exist ${pass} FACTOR]} {
 				set factor [dict get ${pass} FACTOR]
@@ -62,7 +66,7 @@ namespace eval SILVIA {
 			append opt_cmd " -load ${LLVM_ROOT}/lib/LLVMSILVIA[string toupper ${op} 0 0].so"
 			append opt_cmd " -basicaa -silvia-${op}"
 			if {${op} == "add"} {
-				append opt_cmd " -silvia-add-simd-factor=${factor}"
+				append opt_cmd " -silvia-add-op=${instruction} -silvia-add-simd-factor=${factor}"
 			}
 			if {(${op} == "mul" || ${op} == "muladd") && [dict exist ${pass} INLINE]} {
 				append opt_cmd " -silvia-${op}-inline=[dict get ${pass} INLINE]"
@@ -88,6 +92,14 @@ namespace eval SILVIA {
 			}
 			set op [dict get ${pass} OP]
 			if {${op} == "add"} {
+				set instruction "add"
+				if {[dict exist ${pass} INST]} {
+					set instruction [dict get ${pass} INST]
+				}
+				set operator "+"
+				if {${instruction} == "sub"} {
+					set operator "-"
+				}
 				set factor 2
 				if {[dict exist ${pass} FACTOR]} {
 					set factor [dict get ${pass} FACTOR]
@@ -99,11 +111,13 @@ namespace eval SILVIA {
 						} else {
 							set extension "vhd"
 						}
-						set name "_simd_${op}_${factor}"
+						set name "_simd_${instruction}_${factor}"
 						foreach f [glob -nocomplain ${project_path}/${solution_name}/${dir}/${lang}/*${name}*.${extension}] {
 							set fbasename [file tail $f]
 							if {[regexp "^(.*)${name}(.*)\.${extension}\$" $fbasename -> prefix suffix]} {
 								file copy -force ${ROOT}/template/${op}/${op}_${factor}.${extension} $f
+								exec sh -c "sed -i 's/\{\{instruction\}\}/${instruction}/g' $f"
+								exec sh -c "sed -i 's/\{\{operator\}\}/${operator}/g' $f"
 								exec sh -c "sed -i 's/\{\{prefix\}\}/${prefix}/g' $f"
 								exec sh -c "sed -i 's/\{\{suffix\}\}/${suffix}/g' $f"
 							}

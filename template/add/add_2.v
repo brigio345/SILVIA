@@ -9,7 +9,7 @@
 (* use_dsp = "simd" *)
 (* use_simd = "two24" *)
 (* use_mult = "none" *)
-module {{prefix}}_simd_add_2{{suffix}} (
+module {{prefix}}_simd_{{instruction}}_2{{suffix}} (
     input   ap_clk,
     input   ap_rst,
     input  [23:0] a0_val,
@@ -65,8 +65,8 @@ always @ (*) begin
     end
 end
 
-assign add_ln25_fu_48_p2 = (b0_val + a0_val);
+assign add_ln25_fu_48_p2 = (a0_val {{operator}} b0_val);
 
-assign add_ln26_fu_54_p2 = (b1_val + a1_val);
+assign add_ln26_fu_54_p2 = (a1_val {{operator}} b1_val);
 
-endmodule //{{prefix}}_simd_add_2{{suffix}}
+endmodule //{{prefix}}_simd_{{instruction}}_2{{suffix}}

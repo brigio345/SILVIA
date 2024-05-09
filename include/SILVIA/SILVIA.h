@@ -170,8 +170,15 @@ Instruction *SILVIA::getFirstAliasingInst(Instruction *instToMove,
     if (&I == instToMove)
       continue;
 
-    if (dyn_cast<CallInst>(&I))
-      return &I;
+    if (auto call = dyn_cast<CallInst>(&I)) {
+      auto calleeName = call->getCalledFunction()->getName();
+      if ((!calleeName.startswith("llvm.dbg.value")) &&
+          (!calleeName.startswith("_ssdm_op_BitSelect") &&
+           (!calleeName.startswith("_ssdm_op_PartSelect")) &&
+           (!calleeName.startswith("_ssdm_op_Read")))) {
+        return &I;
+      }
+    }
 
     if (auto store = dyn_cast<StoreInst>(&I)) {
       auto loc = AA->getLocation(store);
@@ -226,8 +233,15 @@ Instruction *SILVIA::getLastAliasingInst(Instruction *instToMove,
     if (&I == instToMove)
       continue;
 
-    if (dyn_cast<CallInst>(&I))
-      return &I;
+    if (auto call = dyn_cast<CallInst>(&I)) {
+      auto calleeName = call->getCalledFunction()->getName();
+      if ((!calleeName.startswith("llvm.dbg.value")) &&
+          (!calleeName.startswith("_ssdm_op_BitSelect") &&
+           (!calleeName.startswith("_ssdm_op_PartSelect")) &&
+           (!calleeName.startswith("_ssdm_op_Read")))) {
+        return &I;
+      }
+    }
 
     if (auto store = dyn_cast<StoreInst>(&I)) {
       auto loc = AA->getLocation(store);
@@ -276,8 +290,18 @@ int SILVIA::getExtOpcode(Instruction *I) {
 bool SILVIA::moveDefsASAP(Instruction *inst, bool anticipateInst = false) {
   // TODO: Anticipate calls if not crossing other calls or loads/stores.
   auto opcode = inst->getOpcode();
-  if ((opcode == Instruction::PHI) || (opcode == Instruction::Call))
+  if (opcode == Instruction::PHI)
     return false;
+
+  if (auto call = dyn_cast<CallInst>(inst)) {
+    auto calleeName = call->getCalledFunction()->getName();
+    if ((!calleeName.startswith("llvm.dbg.value")) &&
+        (!calleeName.startswith("_ssdm_op_BitSelect") &&
+         (!calleeName.startswith("_ssdm_op_PartSelect")) &&
+         (!calleeName.startswith("_ssdm_op_Read")))) {
+      return false;
+    }
+  }
 
   auto modified = false;
   BasicBlock *instBB = inst->getParent();
@@ -310,8 +334,18 @@ bool SILVIA::moveDefsASAP(Instruction *inst, bool anticipateInst = false) {
 bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
   // TODO: Posticipate calls if not crossing other calls or loads/stores.
   auto opcode = inst->getOpcode();
-  if ((opcode == Instruction::PHI) || (opcode == Instruction::Call))
+  if (opcode == Instruction::PHI)
     return false;
+
+  if (auto call = dyn_cast<CallInst>(inst)) {
+    auto calleeName = call->getCalledFunction()->getName();
+    if ((!calleeName.startswith("llvm.dbg.value")) &&
+        (!calleeName.startswith("_ssdm_op_BitSelect") &&
+         (!calleeName.startswith("_ssdm_op_PartSelect")) &&
+         (!calleeName.startswith("_ssdm_op_Read")))) {
+      return false;
+    }
+  }
 
   auto modified = false;
   BasicBlock *instBB = inst->getParent();

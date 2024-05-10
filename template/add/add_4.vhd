@@ -8,7 +8,7 @@ library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 
-entity {{prefix}}_simd_{{instruction}}_4{{suffix}} is
+entity {{module_name}} is
 port (
     ap_clk : IN STD_LOGIC;
     ap_rst : IN STD_LOGIC;
@@ -29,12 +29,12 @@ port (
     attribute use_dsp : string;
     attribute use_simd : string;
     attribute use_mult : string;
-    attribute use_dsp of {{prefix}}_simd_{{instruction}}_4{{suffix}}: entity is "simd";
-    attribute use_simd of {{prefix}}_simd_{{instruction}}_4{{suffix}}: entity is "four12";
-    attribute use_mult of {{prefix}}_simd_{{instruction}}_4{{suffix}}: entity is "none";
+    attribute use_dsp of {{module_name}}: entity is "simd";
+    attribute use_simd of {{module_name}}: entity is "four12";
+    attribute use_mult of {{module_name}}: entity is "none";
 end;
 
-architecture behav of {{prefix}}_simd_{{instruction}}_4{{suffix}} is 
+architecture behav of {{module_name}} is 
     constant ap_const_logic_1 : STD_LOGIC := '1';
     constant ap_const_logic_0 : STD_LOGIC := '0';
     constant ap_const_boolean_1 : BOOLEAN := true;

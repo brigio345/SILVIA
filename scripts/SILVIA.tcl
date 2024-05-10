@@ -114,12 +114,10 @@ namespace eval SILVIA {
 						set name "_simd_${instruction}_${factor}"
 						foreach f [glob -nocomplain ${project_path}/${solution_name}/${dir}/${lang}/*${name}*.${extension}] {
 							set fbasename [file tail $f]
-							if {[regexp "^(.*)${name}(.*)\.${extension}\$" $fbasename -> prefix suffix]} {
+							if {[regexp "^(.*${name}.*)\.${extension}\$" $fbasename -> module_name]} {
 								file copy -force ${ROOT}/template/${op}/${op}_${factor}.${extension} $f
-								exec sh -c "sed -i 's/\{\{instruction\}\}/${instruction}/g' $f"
+								exec sh -c "sed -i 's/\{\{module_name\}\}/${module_name}/g' $f"
 								exec sh -c "sed -i 's/\{\{operator\}\}/${operator}/g' $f"
-								exec sh -c "sed -i 's/\{\{prefix\}\}/${prefix}/g' $f"
-								exec sh -c "sed -i 's/\{\{suffix\}\}/${suffix}/g' $f"
 							}
 						}
 					}

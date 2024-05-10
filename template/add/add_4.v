@@ -9,7 +9,7 @@
 (* use_dsp = "simd" *)
 (* use_simd = "four12" *)
 (* use_mult = "none" *)
-module {{prefix}}_simd_{{instruction}}_4{{suffix}} (
+module {{module_name}} (
     input   ap_clk,
     input   ap_rst,
     input  [11:0] a0_val,
@@ -109,4 +109,4 @@ assign add_ln27_fu_92_p2 = (a2_val {{operator}} b2_val);
 
 assign add_ln28_fu_98_p2 = (a3_val {{operator}} b3_val);
 
-endmodule //{{prefix}}_simd_{{instruction}}_4{{suffix}}
+endmodule //{{module_name}}

@@ -118,6 +118,9 @@ namespace eval SILVIA {
 								file copy -force ${ROOT}/template/${op}/${op}_${factor}.${extension} $f
 								exec sh -c "sed -i 's/\{\{module_name\}\}/${module_name}/g' $f"
 								exec sh -c "sed -i 's/\{\{operator\}\}/${operator}/g' $f"
+								if {${lang} == "verilog"} {
+									file rename ${f} [file rootname ${f}].sv
+								}
 							}
 						}
 					}

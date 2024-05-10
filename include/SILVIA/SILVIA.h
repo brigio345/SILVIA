@@ -143,6 +143,15 @@ Instruction *getFirstValueUse(Instruction *inst) {
   return firstUse;
 }
 
+bool mayHaveSideEffects(Function *F) {
+  auto FName = F->getName();
+  return (!(FName.startswith("llvm.dbg.value") ||
+            FName.startswith("_ssdm_op_SparseMux") ||
+            FName.startswith("_ssdm_op_BitSelect") ||
+            FName.startswith("_ssdm_op_BitConcatenate") ||
+            FName.startswith("_ssdm_op_PartSelect")));
+}
+
 Instruction *SILVIA::getFirstAliasingInst(Instruction *instToMove,
                                           Instruction *firstInst,
                                           Instruction *lastInst) {
@@ -171,13 +180,8 @@ Instruction *SILVIA::getFirstAliasingInst(Instruction *instToMove,
       continue;
 
     if (auto call = dyn_cast<CallInst>(&I)) {
-      auto calleeName = call->getCalledFunction()->getName();
-      if ((!calleeName.startswith("llvm.dbg.value")) &&
-          (!calleeName.startswith("_ssdm_op_BitSelect") &&
-           (!calleeName.startswith("_ssdm_op_PartSelect")) &&
-           (!calleeName.startswith("_ssdm_op_Read")))) {
+      if (mayHaveSideEffects(call->getCalledFunction()))
         return &I;
-      }
     }
 
     if (auto store = dyn_cast<StoreInst>(&I)) {
@@ -234,13 +238,8 @@ Instruction *SILVIA::getLastAliasingInst(Instruction *instToMove,
       continue;
 
     if (auto call = dyn_cast<CallInst>(&I)) {
-      auto calleeName = call->getCalledFunction()->getName();
-      if ((!calleeName.startswith("llvm.dbg.value")) &&
-          (!calleeName.startswith("_ssdm_op_BitSelect") &&
-           (!calleeName.startswith("_ssdm_op_PartSelect")) &&
-           (!calleeName.startswith("_ssdm_op_Read")))) {
+      if (mayHaveSideEffects(call->getCalledFunction()))
         return &I;
-      }
     }
 
     if (auto store = dyn_cast<StoreInst>(&I)) {
@@ -294,13 +293,8 @@ bool SILVIA::moveDefsASAP(Instruction *inst, bool anticipateInst = false) {
     return false;
 
   if (auto call = dyn_cast<CallInst>(inst)) {
-    auto calleeName = call->getCalledFunction()->getName();
-    if ((!calleeName.startswith("llvm.dbg.value")) &&
-        (!calleeName.startswith("_ssdm_op_BitSelect") &&
-         (!calleeName.startswith("_ssdm_op_PartSelect")) &&
-         (!calleeName.startswith("_ssdm_op_Read")))) {
+    if (mayHaveSideEffects(call->getCalledFunction()))
       return false;
-    }
   }
 
   auto modified = false;
@@ -338,13 +332,8 @@ bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
     return false;
 
   if (auto call = dyn_cast<CallInst>(inst)) {
-    auto calleeName = call->getCalledFunction()->getName();
-    if ((!calleeName.startswith("llvm.dbg.value")) &&
-        (!calleeName.startswith("_ssdm_op_BitSelect") &&
-         (!calleeName.startswith("_ssdm_op_PartSelect")) &&
-         (!calleeName.startswith("_ssdm_op_Read")))) {
+    if (mayHaveSideEffects(call->getCalledFunction()))
       return false;
-    }
   }
 
   auto modified = false;

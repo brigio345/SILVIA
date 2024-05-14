@@ -420,6 +420,24 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
          CI != CE;) {
       SILVIA::Candidate candidateInstCurr = *CI;
 
+      if (!isCandidateCompatibleWithTuple(candidateInstCurr, instTuple)) {
+        CI++;
+        continue;
+      }
+
+      auto compatible = true;
+      auto opInst = dyn_cast<Instruction>(candidateInstCurr.outInst);
+      for (auto selected : instTuple) {
+        if (dependsOn(opInst, selected.outInst)) {
+          compatible = false;
+          break;
+        }
+      }
+      if (!compatible) {
+        CI++;
+        continue;
+      }
+
       modified |= moveDefsASAP(candidateInstCurr.outInst);
       modified |= moveUsesALAP(candidateInstCurr.outInst);
 
@@ -441,24 +459,6 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
       // compatible with current tuple.
       if (firstUseCurr && lastDefCurr &&
           (instMap[firstUseCurr] < instMap[lastDefCurr])) {
-        CI++;
-        continue;
-      }
-
-      auto compatible = true;
-      auto opInst = dyn_cast<Instruction>(candidateInstCurr.outInst);
-      for (auto selected : instTuple) {
-        if (dependsOn(opInst, selected.outInst)) {
-          compatible = false;
-          break;
-        }
-      }
-      if (!compatible) {
-        CI++;
-        continue;
-      }
-
-      if (!isCandidateCompatibleWithTuple(candidateInstCurr, instTuple)) {
         CI++;
         continue;
       }

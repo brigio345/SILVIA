@@ -55,7 +55,7 @@ namespace eval SILVIA {
 				set instruction [dict get ${pass} INST]
 			}
 			set factor 2
-			if {${op} == "add" && [dict exist ${pass} FACTOR]} {
+			if {(${op} == "add" || ${op} == "mul") && [dict exist ${pass} FACTOR]} {
 				set factor [dict get ${pass} FACTOR]
 			}
 			exec ${LLVM_ROOT}/bin/llvm-link ${ROOT}/template/${op}/${op}.ll ${dut_path}/a.o.3.bc -o ${dut_path}/a.o.3.bc
@@ -67,6 +67,9 @@ namespace eval SILVIA {
 			append opt_cmd " -basicaa -silvia-${op}"
 			if {${op} == "add"} {
 				append opt_cmd " -silvia-add-op=${instruction} -silvia-add-simd-factor=${factor}"
+			}
+			if {${op} == "mul"} {
+				append opt_cmd " -silvia-mul-simd-factor=${factor}"
 			}
 			if {(${op} == "mul" || ${op} == "muladd") && [dict exist ${pass} INLINE]} {
 				append opt_cmd " -silvia-${op}-inline=[dict get ${pass} INLINE]"
@@ -91,20 +94,33 @@ namespace eval SILVIA {
 				continue
 			}
 			set op [dict get ${pass} OP]
-			if {${op} == "add"} {
-				set instruction "add"
-				if {[dict exist ${pass} INST]} {
-					set instruction [dict get ${pass} INST]
+			if {${op} == "add" || ${op} == "mul"} {
+				set factor 2
+				if {[dict exist ${pass} FACTOR]} {
+					set factor [dict get ${pass} FACTOR]
+				}
+
+				if {${op} == "mul" && ${factor} != 4} {
+					continue
+				}
+
+				if {${op} == "add"} {
+					set instruction "add"
+					if {[dict exist ${pass} INST]} {
+						set instruction [dict get ${pass} INST]
+					}
+				} elseif {${op} == "mul"} {
+					set instruction "mul_signed"
 				}
 				set operator "+"
 				if {${instruction} == "sub"} {
 					set operator "-"
 				}
-				set factor 2
-				if {[dict exist ${pass} FACTOR]} {
-					set factor [dict get ${pass} FACTOR]
+				set langs [list "verilog"]
+				if {${op} == "add"} {
+					lappend langs "vhdl"
 				}
-				foreach lang "verilog vhdl" {
+				foreach lang ${langs} {
 					foreach dir "syn impl" {
 						if {${lang} == "verilog"} {
 							set extension "v"

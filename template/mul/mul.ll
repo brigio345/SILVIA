@@ -4,6 +4,31 @@ target triple = "fpga64-xilinx-none"
 
 @empty_0 = internal unnamed_addr constant [1 x i8] zeroinitializer
 
+define internal fastcc { i8, i8, i8, i8 } @_simd_mul_4(i4 %w0, i4 %w1, i4 %w2, i4 %w3, i5 %a) nounwind readnone noinline {
+entry:
+  call void (...)* @_ssdm_op_SpecPipeline(i32 1, i32 0, i32 0, i32 0, [1 x i8]* @empty_0)
+  call void (...)* @_ssdm_op_SpecLatency(i64 5, i64 5, [1 x i8]* @empty_0)
+  %w0_read = call i4 @_ssdm_op_Read.ap_auto.i4(i4 %w0) nounwind, !bitwidth !0
+  %w1_read = call i4 @_ssdm_op_Read.ap_auto.i4(i4 %w1) nounwind, !bitwidth !0
+  %w2_read = call i4 @_ssdm_op_Read.ap_auto.i4(i4 %w2) nounwind, !bitwidth !0
+  %w3_read = call i4 @_ssdm_op_Read.ap_auto.i4(i4 %w3) nounwind, !bitwidth !0
+  %a_read = call i5 @_ssdm_op_Read.ap_auto.i5(i5 %a) nounwind, !bitwidth !3
+  %w0_sext = sext i4 %w0_read to i8, !bitwidth !1
+  %w1_sext = sext i4 %w1_read to i8, !bitwidth !1
+  %w2_sext = sext i4 %w2_read to i8, !bitwidth !1
+  %w3_sext = sext i4 %w3_read to i8, !bitwidth !1
+  %a_sext = sext i5 %a_read to i8, !bitwidth !1
+  %p0 = mul i8 %w0_sext, %a_sext, !bitwidth !2
+  %p1 = mul i8 %w1_sext, %a_sext, !bitwidth !2
+  %p2 = mul i8 %w2_sext, %a_sext, !bitwidth !2
+  %p3 = mul i8 %w3_sext, %a_sext, !bitwidth !2
+  %P0 = insertvalue { i8, i8, i8, i8 } undef, i8 %p0, 0, !bitwidth !1599
+  %P1 = insertvalue { i8, i8, i8, i8 } %P0, i8 %p1, 1, !bitwidth !1599
+  %P2 = insertvalue { i8, i8, i8, i8 } %P1, i8 %p2, 2, !bitwidth !1599
+  %P3 = insertvalue { i8, i8, i8, i8 } %P2, i8 %p3, 3, !bitwidth !1599
+  ret { i8, i8, i8, i8 } %P3, !bitwidth !1599
+}
+
 define internal fastcc { i16, i16 } @_simd_mul_signed_2(i9 %a_val, i9 %d_val, i9 %b_val) nounwind readnone noinline {
 entry:
   call void (...)* @_ssdm_op_SpecPipeline(i32 1, i32 0, i32 0, i32 0, [1 x i8]* @empty_0)
@@ -90,9 +115,14 @@ entry:
   ret void
 }
 
-define weak i32 @_ssdm_op_Read.ap_auto.i32(i32) {
+define weak i4 @_ssdm_op_Read.ap_auto.i4(i4) {
 entry:
-  ret i32 %0
+  ret i4 %0
+}
+
+define weak i5 @_ssdm_op_Read.ap_auto.i5(i5) {
+entry:
+  ret i5 %0
 }
 
 define weak i9 @_ssdm_op_Read.ap_auto.i9(i9) {
@@ -126,6 +156,10 @@ entry:
 
 declare i32 @llvm.part.select.i32(i32, i32, i32) nounwind readnone
 
+!0 = metadata !{i32 4, i32 4, i32 0, i32 2}
+!1 = metadata !{i32 8, i32 8, i32 0, i32 1}
+!2 = metadata !{i32 8, i32 8, i32 0, i32 2}
+!3 = metadata !{i32 5, i32 5, i32 0, i32 2}
 !1548 = metadata !{i32 9, i32 9, i32 0, i32 2}
 !1552 = metadata !{i32 32, i32 32, i32 0, i32 2}
 !1599 = metadata !{i32 0, i32 0, i32 0, i32 2}

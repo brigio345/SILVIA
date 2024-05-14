@@ -59,6 +59,8 @@ std::list<SILVIA::Candidate> SILVIAMul::getCandidates(BasicBlock &BB) {
     candidate.outInst = &I;
     for (unsigned i = 0; i < I.getNumOperands(); ++i) {
       auto op = SILVIA::getUnextendedValue(I.getOperand(i));
+      if (isa<Constant>(op))
+        break;
       if (op->getType()->getScalarSizeInBits() <= mulMaxWidth)
         candidate.inVals.push_back(I.getOperand(i));
     }
@@ -81,12 +83,29 @@ bool SILVIAMul::isCandidateCompatibleWithTuple(
   for (auto selected : tuple) {
     if (commonOperand && ((opA0 != commonOperand) && (opA1 != commonOperand)))
       return false;
-    if ((opA0 == selected.inVals[0]) || (opA0 == selected.inVals[1]))
+
+    Value *notCommonOperand;
+    if ((opA0 == selected.inVals[0]) || (opA0 == selected.inVals[1])) {
       commonOperand = opA0;
-    else if ((opA1 == selected.inVals[0]) || (opA1 == selected.inVals[1]))
+      notCommonOperand = opA1;
+    } else if ((opA1 == selected.inVals[0]) || (opA1 == selected.inVals[1])) {
       commonOperand = opA1;
-    else
+      notCommonOperand = opA0;
+    } else {
       return false;
+    }
+
+    if (SILVIAMulSIMDFactor == 4) {
+      if (auto notCommonOperandInst = dyn_cast<Instruction>(
+              SILVIA::getUnextendedValue(notCommonOperand))) {
+        if (SILVIA::getExtOpcode(notCommonOperandInst) == Instruction::ZExt) {
+          DEBUG(dbgs() << "SILVIAMul::isCandidateCompatibleWithTuple: cannot "
+                          "pack a tuple with a "
+                          "non-shared unsigned operand.\n");
+          return false;
+        }
+      }
+    }
   }
 
   return true;
@@ -126,19 +145,6 @@ Value *SILVIAMul::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
                 std::string(instTuple[i].outInst->getName()));
   }
   args[SILVIAMulSIMDFactor] = commonOperand;
-
-  if (SILVIAMulSIMDFactor == 4) {
-    for (unsigned i = 0; i < SILVIAMulSIMDFactor; ++i) {
-      if (auto argInst =
-              dyn_cast<Instruction>(SILVIA::getUnextendedValue(args[i]))) {
-        if (SILVIA::getExtOpcode(argInst) == Instruction::ZExt) {
-          DEBUG(dbgs() << "SILVIAMul::packTuple: cannot pack a tuple with a "
-                          "non-shared unsigned operand.");
-          return nullptr;
-        }
-      }
-    }
-  }
 
   // pack mulLeafA and mulLeafB
   // assign the result to P

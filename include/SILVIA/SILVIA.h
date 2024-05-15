@@ -496,13 +496,18 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
     IRBuilder<> builder(insertBefore);
     for (unsigned i = 0; i < instTuple.size(); ++i) {
       std::string origName = instTuple[i].outInst->getName();
-      auto packedInst = builder.CreateExtractValue(pack, i);
+      Instruction *packedInst =
+          cast<Instruction>(builder.CreateExtractValue(pack, i));
       for (auto candidate : candidateInsts) {
         for (auto inVal : candidate.inVals) {
           if (inVal == instTuple[i].outInst) {
             inVal = packedInst;
           }
         }
+      }
+      if (insertBefore == instTuple[i].outInst) {
+        insertBefore = packedInst;
+        builder.SetInsertPoint(insertBefore);
       }
       instTuple[i].outInst->replaceAllUsesWith(packedInst);
       instTuple[i].outInst->eraseFromParent();

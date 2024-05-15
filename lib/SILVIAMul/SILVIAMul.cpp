@@ -80,7 +80,7 @@ bool SILVIAMul::isCandidateCompatibleWithTuple(
   auto opA0 = candidate.inVals[0];
   auto opA1 = candidate.inVals[1];
   Value *commonOperand = nullptr;
-  for (auto selected : tuple) {
+  for (const auto &selected : tuple) {
     if (commonOperand && ((opA0 != commonOperand) && (opA1 != commonOperand)))
       return false;
 
@@ -193,7 +193,7 @@ Value *SILVIAMul::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   }
 
   SmallVector<Type *, 4> prodTypes;
-  for (auto prod : prods)
+  for (const auto &prod : prods)
     prodTypes.push_back(prod->getType());
   auto prodStructTy = StructType::create(prodTypes);
 

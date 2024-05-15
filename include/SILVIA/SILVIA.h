@@ -83,7 +83,7 @@ struct SILVIA : public BasicBlockPass {
 #endif /* DEBUG */
 };
 
-bool dependsOn(Instruction *inst0, Instruction *inst1) {
+bool dependsOn(const Instruction *inst0, const Instruction *inst1) {
   if (inst0->getParent() != inst1->getParent())
     return false;
 
@@ -100,15 +100,16 @@ bool dependsOn(Instruction *inst0, Instruction *inst1) {
   return false;
 }
 
-void getInstMap(BasicBlock *BB, DenseMap<Instruction *, int> &instMap) {
-  for (auto &inst : *BB)
+void getInstMap(const BasicBlock *const BB,
+                DenseMap<const Instruction *, int> &instMap) {
+  for (const auto &inst : *BB)
     instMap[&inst] = instMap.size();
 }
 
-Instruction *getLastOperandDef(Instruction *inst) {
-  BasicBlock *instBB = inst->getParent();
+Instruction *getLastOperandDef(const Instruction *const inst) {
+  auto instBB = inst->getParent();
 
-  DenseMap<Instruction *, int> instMap;
+  DenseMap<const Instruction *, int> instMap;
   getInstMap(instBB, instMap);
 
   Instruction *lastDef = nullptr;
@@ -127,7 +128,7 @@ Instruction *getLastOperandDef(Instruction *inst) {
 Instruction *getFirstValueUse(Instruction *inst) {
   BasicBlock *instBB = inst->getParent();
 
-  DenseMap<Instruction *, int> instMap;
+  DenseMap<const Instruction *, int> instMap;
   getInstMap(instBB, instMap);
 
   Instruction *firstUse = nullptr;
@@ -371,9 +372,9 @@ void getDefsUsesInterval(SmallVector<SILVIA::Candidate, 4> &tuple,
   if (tuple.size() < 1)
     return;
 
-  DenseMap<Instruction *, int> instMap;
+  DenseMap<const Instruction *, int> instMap;
   getInstMap(tuple[0].outInst->getParent(), instMap);
-  for (auto candidate : tuple) {
+  for (const auto &candidate : tuple) {
     Instruction *lastDefCand = getLastOperandDef(candidate.outInst);
     Instruction *firstUseCand = getFirstValueUse(candidate.outInst);
 
@@ -399,9 +400,9 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   AA = &getAnalysis<AliasAnalysis>();
 
   std::list<SILVIA::Candidate> candidateInsts = getCandidates(BB);
-  DEBUG(if (candidateInsts.size() > 0) dbgs()
-        << "SILVIA::getCandidates: found " << candidateInsts.size()
-        << " candidates.\n");
+  DEBUG(if (candidateInsts.size() > 0) dbgs() << "SILVIA::getCandidates: found "
+                                              << candidateInsts.size()
+                                              << " candidates.\n");
 
   if (candidateInsts.size() < 2)
     return false;
@@ -426,7 +427,7 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
       }
 
       auto compatible = true;
-      for (auto selected : instTuple) {
+      for (const auto &selected : instTuple) {
         if (dependsOn(candidateInstCurr.outInst, selected.outInst)) {
           compatible = false;
           break;
@@ -444,7 +445,7 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
       Instruction *lastDefCurr = getLastOperandDef(candidateInstCurr.outInst);
       Instruction *firstUseCurr = getFirstValueUse(candidateInstCurr.outInst);
 
-      DenseMap<Instruction *, int> instMap;
+      DenseMap<const Instruction *, int> instMap;
       getInstMap(&BB, instMap);
       if ((!lastDefCurr) ||
           (lastDef && (instMap[lastDefCurr] < instMap[lastDef])))

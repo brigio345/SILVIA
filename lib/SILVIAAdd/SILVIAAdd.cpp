@@ -118,7 +118,7 @@ Value *SILVIAAdd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
 
   // Replace the add instruction with the result
   SmallVector<Type *, 2> addTypes;
-  for (auto add : adds)
+  for (const auto &add : adds)
     addTypes.push_back(add->getType());
   auto addStructTy = StructType::create(addTypes);
 

@@ -133,8 +133,8 @@ std::list<SILVIA::Candidate> SILVIAMuladd::getCandidates(BasicBlock &BB) {
     Instruction *I = II;
     if (I->getOpcode() == Instruction::Add) {
       bool subset = false;
-      for (auto tree : trees) {
-        for (auto &add : tree.addInternal) {
+      for (const auto &tree : trees) {
+        for (const auto &add : tree.addInternal) {
           if (add == I) {
             subset = true;
             break;
@@ -154,7 +154,7 @@ std::list<SILVIA::Candidate> SILVIAMuladd::getCandidates(BasicBlock &BB) {
 #ifdef DEBUG
       auto muls = 0;
 #endif /* DEBUG */
-      for (auto leaf : tree.candidate.inVals) {
+      for (const auto &leaf : tree.candidate.inVals) {
         if (auto leafInst = dyn_cast<Instruction>(leaf)) {
           if (leafInst->getOpcode() != Instruction::Mul)
             continue;
@@ -178,7 +178,7 @@ std::list<SILVIA::Candidate> SILVIAMuladd::getCandidates(BasicBlock &BB) {
   }
 
   std::list<SILVIA::Candidate> candidates;
-  for (auto tree : trees)
+  for (const auto &tree : trees)
     candidates.push_back(tree.candidate);
 
   return candidates;
@@ -189,7 +189,7 @@ bool SILVIAMuladd::isCandidateCompatibleWithTuple(
   if (tuple.size() < 1)
     return true;
 
-  for (auto mulLeafA : candidate.inVals) {
+  for (const auto &mulLeafA : candidate.inVals) {
     auto mulLeafInstA = dyn_cast<Instruction>(mulLeafA);
 
     if ((!mulLeafInstA) || (mulLeafInstA->getOpcode() != Instruction::Mul))
@@ -203,7 +203,7 @@ bool SILVIAMuladd::isCandidateCompatibleWithTuple(
     if ((opA0->getType()->getScalarSizeInBits() > 8) ||
         (opA1->getType()->getScalarSizeInBits() > 8))
       continue;
-    for (auto mulLeafB : tuple[0].inVals) {
+    for (const auto &mulLeafB : tuple[0].inVals) {
       auto mulLeafInstB = dyn_cast<Instruction>(mulLeafB);
 
       if ((!mulLeafInstB) || (mulLeafInstB->getOpcode() != Instruction::Mul))
@@ -239,7 +239,7 @@ unsigned getMaxChainLength(const SmallVector<LeavesPack, 8> &leavesPacks,
                            const int DExt) {
   unsigned maxSize[3] = {0};
 
-  for (auto leavesPack : leavesPacks) {
+  for (const auto &leavesPack : leavesPacks) {
     for (int i = 0; i < 3; ++i) {
       const auto size = SILVIA::getUnextendedValue(leavesPack.leaves[i])
                             ->getType()
@@ -303,7 +303,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   SmallVector<SmallVector<Instruction *, 8>, 2> unpackedMuls(instTuple.size());
 
   for (unsigned i = 0; i < instTuple.size(); ++i) {
-    for (auto leaf : instTuple[i].inVals) {
+    for (const auto &leaf : instTuple[i].inVals) {
       auto leafInst = dyn_cast<Instruction>(leaf);
 
       if ((leafInst) && (leafInst->getOpcode() == Instruction::Mul) &&
@@ -326,7 +326,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
                 pragmas.push_back(user);
             }
           }
-          for (auto pragma : pragmas)
+          for (const auto &pragma : pragmas)
             pragma->eraseFromParent();
         }
         if (leafInst->hasOneUse())
@@ -341,7 +341,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
 
   SmallVector<LeavesPack, 8> leavesPacks;
   SmallVector<int, 2> ext(instTuple.size());
-  for (auto mulLeafA : unpackedMuls[0]) {
+  for (const auto &mulLeafA : unpackedMuls[0]) {
     auto packed = false;
     auto opA0 = mulLeafA->getOperand(0);
     auto opA1 = mulLeafA->getOperand(1);
@@ -379,7 +379,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
       toAdd[0].push_back(mulLeafA);
   }
 
-  for (auto mul : unpackedMuls[1])
+  for (const auto &mul : unpackedMuls[1])
     toAdd[1].push_back(mul);
 
   int maxChainLength = getMaxChainLength(leavesPacks, ext[1]);
@@ -435,7 +435,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
 
   // 2. sum the extracted prods to the unpacked leafs
   for (unsigned i = 0; i < toAdd.size(); ++i) {
-    for (auto endOfChain : endsOfChain)
+    for (const auto &endOfChain : endsOfChain)
       toAdd[i].push_back(builder.CreateExtractValue(endOfChain, i));
   }
 
@@ -459,7 +459,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   }
 
   SmallVector<Type *, 2> rootTypes;
-  for (auto root : sums)
+  for (const auto &root : sums)
     rootTypes.push_back(root->getType());
   auto rootStructTy = StructType::create(rootTypes);
 
@@ -470,9 +470,9 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
 
   if (SILVIAMuladdInline) {
     InlineFunctionInfo IFI;
-    for (auto P : mulAddCalls)
+    for (const auto &P : mulAddCalls)
       InlineFunction(P, IFI);
-    for (auto endOfChain : endsOfChain)
+    for (const auto &endOfChain : endsOfChain)
       InlineFunction(endOfChain, IFI);
   }
 

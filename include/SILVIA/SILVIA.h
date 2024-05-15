@@ -498,11 +498,10 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
       std::string origName = instTuple[i].outInst->getName();
       Instruction *packedInst =
           cast<Instruction>(builder.CreateExtractValue(pack, i));
-      for (auto candidate : candidateInsts) {
-        for (auto inVal : candidate.inVals) {
-          if (inVal == instTuple[i].outInst) {
+      for (auto &candidate : candidateInsts) {
+        for (auto &inVal : candidate.inVals) {
+          if (inVal == instTuple[i].outInst)
             inVal = packedInst;
-          }
         }
       }
       if (insertBefore == instTuple[i].outInst) {

@@ -426,9 +426,8 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
       }
 
       auto compatible = true;
-      auto opInst = dyn_cast<Instruction>(candidateInstCurr.outInst);
       for (auto selected : instTuple) {
-        if (dependsOn(opInst, selected.outInst)) {
+        if (dependsOn(candidateInstCurr.outInst, selected.outInst)) {
           compatible = false;
           break;
         }

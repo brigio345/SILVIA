@@ -417,6 +417,11 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
 
+    instTuple.push_back(candidateInsts.front());
+    candidateInsts.pop_front();
+    modified |= moveDefsASAP(instTuple[0].outInst);
+    modified |= moveUsesALAP(instTuple[0].outInst);
+
     for (auto CI = candidateInsts.begin(), CE = candidateInsts.end();
          CI != CE;) {
       SILVIA::Candidate candidateInstCurr = *CI;

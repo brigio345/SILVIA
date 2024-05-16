@@ -365,7 +365,7 @@ bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
 }
 
 void getDefsUsesInterval(SmallVector<SILVIA::Candidate, 4> &tuple,
-                         Instruction *lastDef, Instruction *firstUse) {
+                         Instruction *&lastDef, Instruction *&firstUse) {
   lastDef = nullptr;
   firstUse = nullptr;
 

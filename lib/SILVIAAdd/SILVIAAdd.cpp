@@ -62,7 +62,8 @@ std::list<SILVIA::Candidate> SILVIAAdd::getCandidates(BasicBlock &BB) {
       continue;
     if (I.getType()->getScalarSizeInBits() <= addMaxWidth) {
       SILVIA::Candidate candidate;
-      candidate.inVals.push_back(&I);
+      for (unsigned i = 0; i < I.getNumOperands(); ++i)
+        candidate.inVals.push_back(I.getOperand(i));
       candidate.outInst = &I;
       candidateInsts.push_back(candidate);
     }
@@ -93,7 +94,7 @@ Value *SILVIAAdd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   for (unsigned i = 0; i < instTuple.size(); ++i) {
     retName = retName + ((retName == "") ? "" : "_") +
               instTuple[i].outInst->getName().str();
-    auto addInst = cast<Instruction>(instTuple[i].inVals[0]);
+    auto addInst = instTuple[i].outInst;
     for (unsigned j = 0; j < addInst->getNumOperands(); ++j) {
       auto operand = addInst->getOperand(j);
 

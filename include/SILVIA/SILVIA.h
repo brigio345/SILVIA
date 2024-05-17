@@ -85,23 +85,6 @@ struct SILVIA : public BasicBlockPass {
 #endif /* DEBUG */
 };
 
-bool dependsOn(const Instruction *inst0, const Instruction *inst1) {
-  if (inst0->getParent() != inst1->getParent())
-    return false;
-
-  if (inst0 == inst1)
-    return true;
-
-  for (unsigned i = 0; i < inst0->getNumOperands(); ++i) {
-    if (auto operandInst = dyn_cast<Instruction>(inst0->getOperand(i))) {
-      if (dependsOn(operandInst, inst1))
-        return true;
-    }
-  }
-
-  return false;
-}
-
 void getInstMap(const BasicBlock *const BB,
                 DenseMap<const Instruction *, int> &instMap) {
   instMap.clear();
@@ -472,18 +455,6 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
         continue;
       }
 
-      auto compatible = true;
-      for (const auto &selected : instTuple) {
-        if (dependsOn(candidateInstCurr.outInst, selected.outInst)) {
-          compatible = false;
-          break;
-        }
-      }
-      if (!compatible) {
-        CI++;
-        continue;
-      }
-
       modified |= moveDefsASAP(candidateInstCurr.outInst, lastDef);
       modified |= moveUsesALAP(candidateInstCurr.outInst, firstUse);
 
@@ -493,6 +464,34 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
 
       DenseMap<const Instruction *, int> instMap;
       getInstMap(&BB, instMap);
+
+      // Check if the current candidate uses the tuple or if the tuple uses the
+      // current candidate.
+      auto compatible = true;
+      for (const auto &selected : instTuple) {
+        for (const auto &inVal : candidateInstCurr.inVals) {
+          if (inVal == selected.outInst) {
+            compatible = false;
+            break;
+          }
+        }
+        if (!compatible)
+          break;
+
+        for (const auto &inVal : selected.inVals) {
+          if (inVal == candidateInstCurr.outInst) {
+            compatible = false;
+            break;
+          }
+        }
+        if (!compatible)
+          break;
+      }
+      if (!compatible) {
+        CI++;
+        continue;
+      }
+
       if ((!lastDefCurr) ||
           (lastDef && (instMap[lastDefCurr] < instMap[lastDef])))
         lastDefCurr = lastDef;
@@ -504,7 +503,7 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
       // If firstUseCurr is before lastDefCurr this pair of instructions is not
       // compatible with current tuple.
       if (firstUseCurr && lastDefCurr &&
-          (instMap[firstUseCurr] < instMap[lastDefCurr])) {
+          (instMap[firstUseCurr] <= instMap[lastDefCurr])) {
         CI++;
         continue;
       }

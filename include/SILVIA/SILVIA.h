@@ -55,8 +55,10 @@ struct SILVIA : public BasicBlockPass {
   virtual std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) {
     return std::list<SILVIA::Candidate>();
   }
-  bool moveDefsASAP(Instruction *inst, bool anticipateInst);
-  bool moveUsesALAP(Instruction *inst, bool posticipateInst);
+  bool moveDefsASAP(Instruction *inst, Instruction *barrier,
+                    bool anticipateInst);
+  bool moveUsesALAP(Instruction *inst, Instruction *barrier,
+                    bool posticipateInst);
   Instruction *getFirstAliasingInst(Instruction *instToMove,
                                     Instruction *firstInst,
                                     Instruction *lastInst);
@@ -288,7 +290,11 @@ int SILVIA::getExtOpcode(Instruction *I) {
   return -1;
 }
 
-bool SILVIA::moveDefsASAP(Instruction *inst, bool anticipateInst = false) {
+bool SILVIA::moveDefsASAP(Instruction *inst, Instruction *barrier = nullptr,
+                          bool anticipateInst = false) {
+  if (inst == barrier)
+    return false;
+
   // TODO: Anticipate calls if not crossing other calls or loads/stores.
   auto opcode = inst->getOpcode();
   if (opcode == Instruction::PHI)
@@ -296,6 +302,13 @@ bool SILVIA::moveDefsASAP(Instruction *inst, bool anticipateInst = false) {
 
   if (auto call = dyn_cast<CallInst>(inst)) {
     if (mayHaveSideEffects(call->getCalledFunction()))
+      return false;
+  }
+
+  if (barrier) {
+    DenseMap<const Instruction *, int> instMap;
+    getInstMap(inst->getParent(), instMap);
+    if (instMap[inst] <= instMap[barrier])
       return false;
   }
 
@@ -307,7 +320,7 @@ bool SILVIA::moveDefsASAP(Instruction *inst, bool anticipateInst = false) {
     if (!opInst)
       continue;
     if (opInst->getParent() == instBB)
-      modified = moveDefsASAP(opInst, true);
+      modified = moveDefsASAP(opInst, barrier, true);
   }
 
   if (!anticipateInst)
@@ -322,12 +335,23 @@ bool SILVIA::moveDefsASAP(Instruction *inst, bool anticipateInst = false) {
   if (aliasingInst)
     insertionPoint = aliasingInst->getNextNode();
 
+  if (barrier) {
+    DenseMap<const Instruction *, int> instMap;
+    getInstMap(inst->getParent(), instMap);
+    if (instMap[insertionPoint] <= instMap[barrier])
+      insertionPoint = barrier->getNextNode();
+  }
+
   inst->moveBefore(insertionPoint);
 
   return true;
 }
 
-bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
+bool SILVIA::moveUsesALAP(Instruction *inst, Instruction *barrier = nullptr,
+                          bool posticipateInst = false) {
+  if (inst == barrier)
+    return false;
+
   // TODO: Posticipate calls if not crossing other calls or loads/stores.
   auto opcode = inst->getOpcode();
   if (opcode == Instruction::PHI)
@@ -335,6 +359,13 @@ bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
 
   if (auto call = dyn_cast<CallInst>(inst)) {
     if (mayHaveSideEffects(call->getCalledFunction()))
+      return false;
+  }
+
+  if (barrier) {
+    DenseMap<const Instruction *, int> instMap;
+    getInstMap(inst->getParent(), instMap);
+    if (instMap[inst] >= instMap[barrier])
       return false;
   }
 
@@ -346,7 +377,7 @@ bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
     if (!userInst)
       continue;
     if (userInst->getParent() == instBB)
-      modified = moveUsesALAP(userInst, true);
+      modified = moveUsesALAP(userInst, barrier, true);
   }
 
   if (!posticipateInst)
@@ -359,6 +390,13 @@ bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
   auto aliasingInst = getFirstAliasingInst(inst, inst, insertionPoint);
   if (aliasingInst)
     insertionPoint = aliasingInst;
+
+  if (barrier) {
+    DenseMap<const Instruction *, int> instMap;
+    getInstMap(inst->getParent(), instMap);
+    if (instMap[insertionPoint] < instMap[barrier])
+      insertionPoint = barrier;
+  }
 
   inst->moveBefore(insertionPoint);
 
@@ -415,13 +453,15 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   while (candidateInsts.size() > 1) {
     SmallVector<SILVIA::Candidate, 4> instTuple;
 
-    Instruction *lastDef = nullptr;
-    Instruction *firstUse = nullptr;
-
     instTuple.push_back(candidateInsts.front());
     candidateInsts.pop_front();
+
     modified |= moveDefsASAP(instTuple[0].outInst);
     modified |= moveUsesALAP(instTuple[0].outInst);
+
+    Instruction *lastDef = nullptr;
+    Instruction *firstUse = nullptr;
+    getDefsUsesInterval(instTuple, lastDef, firstUse);
 
     for (auto CI = candidateInsts.begin(), CE = candidateInsts.end();
          CI != CE;) {
@@ -444,8 +484,8 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
         continue;
       }
 
-      modified |= moveDefsASAP(candidateInstCurr.outInst);
-      modified |= moveUsesALAP(candidateInstCurr.outInst);
+      modified |= moveDefsASAP(candidateInstCurr.outInst, lastDef);
+      modified |= moveUsesALAP(candidateInstCurr.outInst, firstUse);
 
       getDefsUsesInterval(instTuple, lastDef, firstUse);
       Instruction *lastDefCurr = getLastOperandDef(candidateInstCurr.outInst);

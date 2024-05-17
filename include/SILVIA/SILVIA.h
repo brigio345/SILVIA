@@ -102,6 +102,7 @@ bool dependsOn(const Instruction *inst0, const Instruction *inst1) {
 
 void getInstMap(const BasicBlock *const BB,
                 DenseMap<const Instruction *, int> &instMap) {
+  instMap.clear();
   for (const auto &inst : *BB)
     instMap[&inst] = instMap.size();
 }

@@ -412,7 +412,7 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
 
   // Build tuples of SIMDFactor instructions that can be mapped to the
   // same SIMD DSP.
-  while (!candidateInsts.empty()) {
+  while (candidateInsts.size() > 1) {
     SmallVector<SILVIA::Candidate, 4> instTuple;
 
     Instruction *lastDef = nullptr;

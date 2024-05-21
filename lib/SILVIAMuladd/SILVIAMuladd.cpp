@@ -80,6 +80,7 @@ struct LeavesPack {
 void getAddTree(Instruction *root, SILVIAMuladd::AddTree &tree) {
   if (root->getOpcode() != Instruction::Add) {
     tree.candidate.inVals.push_back(root);
+    tree.candidate.outInst = root;
     return;
   }
 
@@ -129,7 +130,8 @@ std::list<SILVIA::Candidate> SILVIAMuladd::getCandidates(BasicBlock &BB) {
   // Iterate in reverse order to avoid collecting subset trees.
   for (auto II = BB.end(), IB = BB.begin(); II != IB; --II) {
     Instruction *I = II;
-    if (I->getOpcode() == Instruction::Add) {
+    const auto opcode = I->getOpcode();
+    if ((opcode == Instruction::Add) || (opcode == Instruction::Mul)) {
       bool subset = false;
       for (const auto &tree : trees) {
         for (const auto &add : tree.addInternal) {
@@ -168,7 +170,7 @@ std::list<SILVIA::Candidate> SILVIAMuladd::getCandidates(BasicBlock &BB) {
       DEBUG(if (muls > 0) dbgs()
             << "SILVIAMuladd::getCandidates: found a tree with " << muls
             << " muls (" << validMuls << " valid).\n");
-      if (validMuls > 1)
+      if (validMuls > 0)
         trees.push_back(tree);
     }
   }

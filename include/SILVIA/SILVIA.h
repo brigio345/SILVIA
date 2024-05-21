@@ -257,14 +257,17 @@ Value *SILVIA::getUnextendedValue(Value *V) {
 }
 
 int SILVIA::getExtOpcode(Instruction *I) {
-  for (auto UI = I->use_begin(), UE = I->use_end(); UI != UE; ++UI) {
-    Instruction *user = dyn_cast<Instruction>(*UI);
-    auto userOpcode = user->getOpcode();
-    if ((userOpcode == Instruction::SExt) || (userOpcode == Instruction::ZExt))
-      return userOpcode;
+  int opcode = -1;
+  for (unsigned i = 0; i < I->getNumOperands(); ++i) {
+    const auto op = dyn_cast<Instruction>(I->getOperand(i));
+    auto opOpcode = op->getOpcode();
+    if (opOpcode == Instruction::SExt)
+      return opOpcode;
+    if (opOpcode == Instruction::ZExt)
+      opcode = Instruction::ZExt;
   }
 
-  return -1;
+  return opcode;
 }
 
 bool SILVIA::moveDefsASAP(Instruction *inst, Instruction *barrier = nullptr,

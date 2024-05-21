@@ -371,7 +371,7 @@ bool SILVIA::moveUsesALAP(Instruction *inst, Instruction *barrier = nullptr,
   if (barrier) {
     DenseMap<const Instruction *, int> instMap;
     getInstMap(inst->getParent(), instMap);
-    if (instMap[insertionPoint] < instMap[barrier])
+    if (instMap[insertionPoint] > instMap[barrier])
       insertionPoint = barrier;
   }
 

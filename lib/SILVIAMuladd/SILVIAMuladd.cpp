@@ -65,6 +65,10 @@ static RegisterPass<SILVIAMuladd> X("silvia-muladd",
                                     false /* Only looks at CFG */,
                                     true /* Transformation Pass */);
 
+static cl::opt<unsigned int>
+    SILVIAMuladdOpSize("silvia-muladd-op-size", cl::init(8), cl::Hidden,
+                       cl::desc("The size in bits of the multiplicands."));
+
 static cl::opt<int>
     SILVIAMuladdMaxChainLen("silvia-muladd-max-chain-len", cl::init(-1),
                             cl::Hidden,
@@ -162,10 +166,10 @@ std::list<SILVIA::Candidate> SILVIAMuladd::getCandidates(BasicBlock &BB) {
           DEBUG(muls++);
           validMuls += ((SILVIA::getUnextendedValue(leafInst->getOperand(0))
                              ->getType()
-                             ->getScalarSizeInBits() <= 8) &&
+                             ->getScalarSizeInBits() <= SILVIAMuladdOpSize) &&
                         ((SILVIA::getUnextendedValue(leafInst->getOperand(1))
                               ->getType()
-                              ->getScalarSizeInBits() <= 8)));
+                              ->getScalarSizeInBits() <= SILVIAMuladdOpSize)));
         }
       }
 
@@ -200,8 +204,8 @@ bool SILVIAMuladd::isCandidateCompatibleWithTuple(
         dyn_cast<Instruction>(mulLeafInstA->getOperand(0)));
     auto opA1 = SILVIA::getUnextendedValue(
         dyn_cast<Instruction>(mulLeafInstA->getOperand(1)));
-    if ((opA0->getType()->getScalarSizeInBits() > 8) ||
-        (opA1->getType()->getScalarSizeInBits() > 8))
+    if ((opA0->getType()->getScalarSizeInBits() > SILVIAMuladdOpSize) ||
+        (opA1->getType()->getScalarSizeInBits() > SILVIAMuladdOpSize))
       continue;
     for (const auto &mulLeafB : tuple[0].inVals) {
       auto mulLeafInstB = dyn_cast<Instruction>(mulLeafB);
@@ -214,8 +218,8 @@ bool SILVIAMuladd::isCandidateCompatibleWithTuple(
       auto opB1 = SILVIA::getUnextendedValue(
           dyn_cast<Instruction>(mulLeafInstB->getOperand(1)));
 
-      if ((opB0->getType()->getScalarSizeInBits() > 8) ||
-          (opB1->getType()->getScalarSizeInBits() > 8))
+      if ((opB0->getType()->getScalarSizeInBits() > SILVIAMuladdOpSize) ||
+          (opB1->getType()->getScalarSizeInBits() > SILVIAMuladdOpSize))
         continue;
 
       if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) || (opA1 == opB1))
@@ -309,10 +313,10 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
       if ((leafInst) && (leafInst->getOpcode() == Instruction::Mul) &&
           ((SILVIA::getUnextendedValue(leafInst->getOperand(0))
                 ->getType()
-                ->getScalarSizeInBits() <= 8) &&
+                ->getScalarSizeInBits() <= SILVIAMuladdOpSize) &&
            (SILVIA::getUnextendedValue(leafInst->getOperand(1))
                 ->getType()
-                ->getScalarSizeInBits() <= 8))) {
+                ->getScalarSizeInBits() <= SILVIAMuladdOpSize))) {
         if (leafInst->getNumUses() > 1) {
           SmallVector<CallInst *, 4> pragmas;
           for (auto UI = leafInst->use_begin(), UE = leafInst->use_end();
@@ -417,7 +421,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
         }
       }
       // This check evaluates to true when the precision of the mul operation
-      // is actually less or equal to 8 bits.
+      // is actually less or equal to SILVIAMuladdOpSize bits.
       // The result is the same with both sext and zext since the higher bits
       // are ignored.
       if (args[i]->getType()->getScalarSizeInBits() < argSize) {
@@ -485,6 +489,10 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
 }
 
 bool SILVIAMuladd::runOnBasicBlock(BasicBlock &BB) {
+  assert((SILVIAMuladdOpSize == 8) &&
+         "SILVIAMuladd: unexpected value for SILVIAMuladdOpSize."
+         "Possible values are: 8.");
+
   // Get the SIMD function
   Module *module = BB.getParent()->getParent();
   MulAdd = module->getFunction(

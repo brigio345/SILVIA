@@ -33,19 +33,15 @@ struct SILVIA : public BasicBlockPass {
   }
 
   bool doInitialization(Module &M) override {
-#ifdef DEBUG
-    packedTuples = 0;
-    packedCandidates = 0;
-#endif /* DEBUG */
+    DEBUG(packedTuples = 0);
+    DEBUG(packedCandidates = 0);
     return false;
   }
 
   bool doFinalization(Module &M) override {
-#ifdef DEBUG
-    if (packedTuples > 0)
-      dbgs() << "SILVIA::doFinalization: packed " << packedTuples << " tuples ("
-             << packedCandidates << " candidates).\n";
-#endif /* DEBUG */
+    DEBUG(if (packedTuples > 0) dbgs()
+          << "SILVIA::doFinalization: packed " << packedTuples << " tuples ("
+          << packedCandidates << " candidates).\n");
     return false;
   }
 
@@ -79,10 +75,8 @@ struct SILVIA : public BasicBlockPass {
   }
 
   AliasAnalysis *AA;
-#ifdef DEBUG
   unsigned long packedTuples;
   unsigned long packedCandidates;
-#endif /* DEBUG */
 };
 
 void getInstMap(const BasicBlock *const BB,
@@ -532,12 +526,10 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
     if (!pack)
       continue;
 
-#ifdef DEBUG
-    packedTuples++;
-    packedCandidates += instTuple.size();
-    dbgs() << "SILVIA::runOnBasicBlock: packed a tuple of " << instTuple.size()
-           << " elements.\n";
-#endif /* DEBUG */
+    DEBUG(packedTuples++);
+    DEBUG(packedCandidates += instTuple.size());
+    DEBUG(dbgs() << "SILVIA::runOnBasicBlock: packed a tuple of "
+                 << instTuple.size() << " elements.\n");
 
     IRBuilder<> builder(insertBefore);
     for (unsigned i = 0; i < instTuple.size(); ++i) {

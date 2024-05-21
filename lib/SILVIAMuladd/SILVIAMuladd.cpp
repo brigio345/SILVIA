@@ -26,19 +26,15 @@ struct SILVIAMuladd : public SILVIA {
   bool runOnBasicBlock(BasicBlock &BB) override;
 
   bool doInitialization(Module &M) override {
-#ifdef DEBUG
-    packedTrees = 0;
-    packedLeaves = 0;
-#endif /* DEBUG */
+    DEBUG(packedTrees = 0);
+    DEBUG(packedLeaves = 0);
     return false;
   }
 
   bool doFinalization(Module &M) override {
-#ifdef DEBUG
-    if (packedTrees > 0)
-      dbgs() << "SILVIAMuladd::doFinalization: packed " << packedTrees
-             << " trees (" << packedLeaves << " leaves).\n";
-#endif /* DEBUG */
+    DEBUG(if (packedTrees > 0) dbgs() << "SILVIAMuladd::doFinalization: packed "
+                                      << packedTrees << " trees ("
+                                      << packedLeaves << " leaves).\n");
     return false;
   }
 
@@ -53,10 +49,8 @@ struct SILVIAMuladd : public SILVIA {
   Function *MulAdd;
   Function *ExtractProdsSign;
   Function *ExtractProdsUnsign;
-#ifdef DEBUG
   unsigned long packedTrees;
   unsigned long packedLeaves;
-#endif /* DEBUG */
 };
 
 char SILVIAMuladd::ID = 0;
@@ -155,9 +149,7 @@ std::list<SILVIA::Candidate> SILVIAMuladd::getCandidates(BasicBlock &BB) {
       getAddTree(I, tree);
 
       auto validMuls = 0;
-#ifdef DEBUG
       auto muls = 0;
-#endif /* DEBUG */
       for (const auto &leaf : tree.candidate.inVals) {
         if (auto leafInst = dyn_cast<Instruction>(leaf)) {
           if (leafInst->getOpcode() != Instruction::Mul)
@@ -480,10 +472,8 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
       InlineFunction(endOfChain, IFI);
   }
 
-#ifdef DEBUG
-  packedTrees += 2;
-  packedLeaves += (2 * leavesPacks.size());
-#endif /* DEBUG */
+  DEBUG(packedTrees += 2);
+  DEBUG(packedLeaves += (2 * leavesPacks.size()));
 
   return rootStruct;
 }

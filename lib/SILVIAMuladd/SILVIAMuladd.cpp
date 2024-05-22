@@ -73,7 +73,7 @@ static cl::opt<bool>
                        cl::desc("Whether to inline the packed operations."));
 
 struct LeavesPack {
-  SmallVector<Value *, 3> leaves;
+  SmallVector<Value *, 5> leaves;
   std::string name;
 };
 
@@ -187,54 +187,84 @@ bool SILVIAMuladd::isCandidateCompatibleWithTuple(
   if (tuple.size() < 1)
     return true;
 
-  for (const auto &mulLeafA : candidate.inVals) {
-    auto mulLeafInstA = dyn_cast<Instruction>(mulLeafA);
+  for (const auto &candidateLeaf : candidate.inVals) {
+    auto candidateLeafInst = dyn_cast<Instruction>(candidateLeaf);
 
-    if ((!mulLeafInstA) || (mulLeafInstA->getOpcode() != Instruction::Mul))
+    if ((!candidateLeafInst) ||
+        (candidateLeafInst->getOpcode() != Instruction::Mul))
       continue;
 
     // TODO: Check if the dyn_casts do not return nullptr.
-    auto opA0 = SILVIA::getUnextendedValue(
-        dyn_cast<Instruction>(mulLeafInstA->getOperand(0)));
-    auto opA1 = SILVIA::getUnextendedValue(
-        dyn_cast<Instruction>(mulLeafInstA->getOperand(1)));
-    if ((opA0->getType()->getScalarSizeInBits() > SILVIAMuladdOpSize) ||
-        (opA1->getType()->getScalarSizeInBits() > SILVIAMuladdOpSize))
+    auto candidateOp0 = SILVIA::getUnextendedValue(
+        dyn_cast<Instruction>(candidateLeafInst->getOperand(0)));
+    auto candidateOp1 = SILVIA::getUnextendedValue(
+        dyn_cast<Instruction>(candidateLeafInst->getOperand(1)));
+    if ((candidateOp0->getType()->getScalarSizeInBits() > SILVIAMuladdOpSize) ||
+        (candidateOp1->getType()->getScalarSizeInBits() > SILVIAMuladdOpSize))
       continue;
-    for (const auto &mulLeafB : tuple[0].inVals) {
-      auto mulLeafInstB = dyn_cast<Instruction>(mulLeafB);
 
-      if ((!mulLeafInstB) || (mulLeafInstB->getOpcode() != Instruction::Mul))
-        continue;
-      // TODO: Check if the dyn_casts do not return nullptr.
-      auto opB0 = SILVIA::getUnextendedValue(
-          dyn_cast<Instruction>(mulLeafInstB->getOperand(0)));
-      auto opB1 = SILVIA::getUnextendedValue(
-          dyn_cast<Instruction>(mulLeafInstB->getOperand(1)));
+    Value *commonOperand = nullptr;
+    for (const auto &selected : tuple) {
+      auto compatible = false;
+      for (const auto &selectedLeaf : selected.inVals) {
+        auto selectedLeafInst = dyn_cast<Instruction>(selectedLeaf);
 
-      if ((opB0->getType()->getScalarSizeInBits() > SILVIAMuladdOpSize) ||
-          (opB1->getType()->getScalarSizeInBits() > SILVIAMuladdOpSize))
-        continue;
+        if ((!selectedLeafInst) ||
+            (selectedLeafInst->getOpcode() != Instruction::Mul))
+          continue;
 
-      if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) || (opA1 == opB1))
-        return true;
+        // TODO: Check if the dyn_casts do not return nullptr.
+        auto selectedOp0 = SILVIA::getUnextendedValue(
+            dyn_cast<Instruction>(selectedLeafInst->getOperand(0)));
+        auto selectedOp1 = SILVIA::getUnextendedValue(
+            dyn_cast<Instruction>(selectedLeafInst->getOperand(1)));
+
+        if (commonOperand && (selectedOp0 != commonOperand) &&
+            (selectedOp1 != commonOperand))
+          continue;
+
+        if ((selectedOp0->getType()->getScalarSizeInBits() >
+             SILVIAMuladdOpSize) ||
+            (selectedOp1->getType()->getScalarSizeInBits() >
+             SILVIAMuladdOpSize))
+          continue;
+
+        if ((candidateOp0 == selectedOp0) || (candidateOp0 == selectedOp1)) {
+          commonOperand = candidateOp0;
+          compatible = true;
+          break;
+        }
+
+        if ((candidateOp1 == selectedOp0) || (candidateOp1 == selectedOp1)) {
+          commonOperand = candidateOp1;
+          compatible = true;
+          break;
+        }
+      }
+
+      if (!compatible) {
+        DEBUG(dbgs() << "SILVIAMuladd::isCandidateCompatibleWithTuple: "
+                        "candidate rooted in "
+                     << candidate.outInst->getName()
+                     << " does not share an operand with candidate rooted in "
+                     << tuple[0].outInst->getName() << ".\n");
+        return false;
+      }
     }
   }
 
-  DEBUG(dbgs()
-        << "SILVIAMuladd::isCandidateCompatibleWithTuple: candidate rooted in "
-        << candidate.outInst->getName()
-        << " does not share an operand with candidate rooted in "
-        << tuple[0].outInst->getName() << ".\n");
-  return false;
+  return true;
 }
 
 bool SILVIAMuladd::isTupleFull(SmallVector<SILVIA::Candidate, 4> &tuple) {
-  return (tuple.size() == 2);
+  return (tuple.size() == (16 / SILVIAMuladdOpSize));
 }
 
 unsigned getMaxChainLength(const SmallVector<LeavesPack, 8> &leavesPacks,
                            const int DExt) {
+  if (SILVIAMuladdOpSize == 4)
+    return 1;
+
   unsigned maxSize[3] = {0};
 
   for (const auto &leavesPack : leavesPacks) {
@@ -297,14 +327,14 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
                                LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
-  SmallVector<SmallVector<Value *, 8>, 2> toAdd(instTuple.size());
-  SmallVector<SmallVector<Instruction *, 8>, 2> unpackedMuls(instTuple.size());
+  SmallVector<SmallVector<Value *, 8>, 4> toAdd(instTuple.size());
+  SmallVector<std::list<Instruction *>, 4> unpackedMuls(instTuple.size());
 
   for (unsigned i = 0; i < instTuple.size(); ++i) {
     for (const auto &leaf : instTuple[i].inVals) {
       auto leafInst = dyn_cast<Instruction>(leaf);
 
-      if ((leafInst) && (leafInst->getOpcode() == Instruction::Mul) &&
+      if (leafInst && (leafInst->getOpcode() == Instruction::Mul) &&
           ((SILVIA::getUnextendedValue(leafInst->getOperand(0))
                 ->getType()
                 ->getScalarSizeInBits() <= SILVIAMuladdOpSize) &&
@@ -338,47 +368,102 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   }
 
   SmallVector<LeavesPack, 8> leavesPacks;
-  SmallVector<int, 2> ext(instTuple.size());
-  for (const auto &mulLeafA : unpackedMuls[0]) {
-    auto packed = false;
-    auto opA0 = mulLeafA->getOperand(0);
-    auto opA1 = mulLeafA->getOperand(1);
-    for (auto MI = unpackedMuls[1].begin(), ME = unpackedMuls[1].end();
-         MI != ME; ++MI) {
-      auto mulLeafB = *MI;
-      auto opB0 = mulLeafB->getOperand(0);
-      auto opB1 = mulLeafB->getOperand(1);
-
-      if ((opA0 == opB0) || (opA0 == opB1) || (opA1 == opB0) ||
-          (opA1 == opB1)) {
-        if (leavesPacks.size() == 0) {
-          ext[0] = SILVIA::getExtOpcode(mulLeafA);
-          ext[1] = SILVIA::getExtOpcode(mulLeafB);
-        } else if ((SILVIA::getExtOpcode(mulLeafA) != ext[0]) ||
-                   (SILVIA::getExtOpcode(mulLeafB) != ext[1])) {
-          return nullptr;
+  SmallVector<int, 4> ext(instTuple.size());
+  // Populate leavesPacks and toAdd with muls from unpackedMuls.
+  for (unsigned i = 0; i < unpackedMuls[0].size(); ++i) {
+    SmallVector<Instruction *, 4> compatibleLeaves(unpackedMuls.size(),
+                                                   nullptr);
+    Value *commonOperand = nullptr;
+    compatibleLeaves[0] = unpackedMuls[0].front();
+    unpackedMuls[0].pop_front();
+    if (leavesPacks.size() == 0)
+      ext[0] = SILVIA::getExtOpcode(compatibleLeaves[0]);
+    for (unsigned j = 1; j < unpackedMuls.size(); ++j) {
+      for (unsigned k = 0; k < unpackedMuls[j].size(); ++k) {
+        auto mulLeaf = unpackedMuls[j].front();
+        unpackedMuls[j].pop_front();
+        Value *op[2] = {mulLeaf->getOperand(0), mulLeaf->getOperand(1)};
+        if (!commonOperand) {
+          Value *selOp[2] = {compatibleLeaves[0]->getOperand(0),
+                             compatibleLeaves[0]->getOperand(1)};
+          if ((op[0] == selOp[0]) || (op[0] == selOp[1])) {
+            commonOperand = op[0];
+          } else if ((op[1] == selOp[0]) || (op[1] == selOp[1])) {
+            commonOperand = op[1];
+          } else {
+            unpackedMuls[j].push_back(mulLeaf);
+            continue;
+          }
+          const auto notCommonSelOp =
+              ((selOp[0] != commonOperand) ? selOp[0] : selOp[1]);
+          if (const auto notCommonSelOpInst =
+                  dyn_cast<Instruction>(notCommonSelOp)) {
+            if ((SILVIAMuladdOpSize == 4) &&
+                (notCommonSelOpInst->getOpcode() == Instruction::ZExt)) {
+              unpackedMuls[j].push_back(mulLeaf);
+              continue;
+            }
+          }
+        }
+        if (commonOperand &&
+            ((op[0] != commonOperand) && (op[1] != commonOperand))) {
+          unpackedMuls[j].push_back(mulLeaf);
+          continue;
         }
 
-        LeavesPack pack;
-        pack.leaves.push_back(((opA0 != opB0) && (opA0 != opB1)) ? opA0 : opA1);
-        pack.leaves.push_back(((opB0 != opA0) && (opB0 != opA1)) ? opB0 : opB1);
-        pack.leaves.push_back(((opA0 == opB0) || (opA0 == opB1)) ? opA0 : opA1);
-        pack.name = std::string(mulLeafA->getName()) + "_" +
-                    std::string(mulLeafB->getName());
+        const auto notCommonOp = ((op[0] != commonOperand) ? op[0] : op[1]);
+        if (const auto notCommonOpInst = dyn_cast<Instruction>(notCommonOp)) {
+          if ((SILVIAMuladdOpSize == 4) &&
+              (notCommonOpInst->getOpcode() == Instruction::ZExt)) {
+            unpackedMuls[j].push_back(mulLeaf);
+            continue;
+          }
+        }
 
-        leavesPacks.push_back(pack);
-        packed = true;
-        unpackedMuls[1].erase(MI);
+        if (leavesPacks.size() == 0) {
+          ext[j] = SILVIA::getExtOpcode(mulLeaf);
+        } else if (SILVIA::getExtOpcode(mulLeaf) != ext[j]) {
+          unpackedMuls[j].push_back(mulLeaf);
+          continue;
+        }
 
+        compatibleLeaves[j] = mulLeaf;
         break;
       }
     }
-    if (!packed)
-      toAdd[0].push_back(mulLeafA);
+
+    auto nCompatibleLeaves = 0;
+    for (const auto &compatibleLeaf : compatibleLeaves)
+      nCompatibleLeaves += (compatibleLeaf != nullptr);
+
+    if (nCompatibleLeaves < 2) {
+      unpackedMuls[0].push_back(compatibleLeaves[0]);
+      continue;
+    }
+
+    LeavesPack pack;
+    for (const auto &leaf : compatibleLeaves) {
+      if (leaf) {
+        Value *op[2] = {leaf->getOperand(0), leaf->getOperand(1)};
+        pack.leaves.push_back((op[0] != commonOperand) ? op[0] : op[1]);
+        pack.name +=
+            ((pack.name == "") ? "" : "_") + std::string(leaf->getName());
+      } else {
+        pack.leaves.push_back(
+            ConstantInt::get(IntegerType::get(context, SILVIAMuladdOpSize), 0));
+      }
+    }
+    pack.leaves.push_back(commonOperand);
+
+    leavesPacks.push_back(pack);
   }
 
-  for (const auto &mul : unpackedMuls[1])
-    toAdd[1].push_back(mul);
+  for (unsigned i = 0; i < unpackedMuls.size(); ++i) {
+    for (const auto &mul : unpackedMuls[i])
+      toAdd[i].push_back(mul);
+  }
+  if (leavesPacks.size() == 0)
+    return nullptr;
 
   int maxChainLength = getMaxChainLength(leavesPacks, ext[1]);
   if ((SILVIAMuladdMaxChainLen > 0) &&
@@ -387,23 +472,28 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   int numChains = std::ceil(leavesPacks.size() / ((float)maxChainLength));
   int balancedChainLength = std::ceil(leavesPacks.size() / ((float)numChains));
   auto ExtractProds =
-      ((ext[1] == Instruction::SExt) ? ExtractProdsSign : ExtractProdsUnsign);
-  Value *P = ConstantInt::get(IntegerType::get(context, 36), 0);
+      (((SILVIAMuladdOpSize == 4) || (ext[1] == Instruction::SExt))
+           ? ExtractProdsSign
+           : ExtractProdsUnsign);
+
+  const unsigned packedProdSize = ((SILVIAMuladdOpSize == 8) ? 36 : 32);
+  Value *P = ConstantInt::get(IntegerType::get(context, packedProdSize), 0);
   SmallVector<Value *, 4> endsOfChain;
   SmallVector<Value *, 8> mulAddCalls;
   for (unsigned dspID = 0; dspID < leavesPacks.size(); ++dspID) {
     if ((dspID > 0) && ((dspID % balancedChainLength) == 0)) {
       endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
-      P = ConstantInt::get(IntegerType::get(context, 36), 0);
+      P = ConstantInt::get(IntegerType::get(context, packedProdSize), 0);
     }
     // pack mulLeafA and mulLeafB + sum P
     // assign the result to P
-    Value *args[4] = {leavesPacks[dspID].leaves[0],
-                      leavesPacks[dspID].leaves[1],
-                      leavesPacks[dspID].leaves[2], P};
+    SmallVector<Value *, 6> args;
+    for (const auto &leaf : leavesPacks[dspID].leaves)
+      args.push_back(leaf);
+    args.push_back(P);
     auto MulAddTy = cast<FunctionType>(
         cast<PointerType>(MulAdd->getType())->getElementType());
-    for (auto i = 0; i < 3; ++i) {
+    for (unsigned i = 0; i < leavesPacks[dspID].leaves.size(); ++i) {
       auto argSize = MulAddTy->getParamType(i)->getScalarSizeInBits();
       if (args[i]->getType()->getScalarSizeInBits() > argSize) {
         auto argOrig = args[i];
@@ -466,10 +556,12 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   for (unsigned i = 0; i < sums.size(); ++i)
     rootStruct = builder.CreateInsertValue(rootStruct, sums[i], i);
 
+  InlineFunctionInfo IFI;
   if (SILVIAMuladdInline) {
-    InlineFunctionInfo IFI;
     for (const auto &P : mulAddCalls)
       InlineFunction(P, IFI);
+  }
+  if (SILVIAMuladdInline || (SILVIAMuladdOpSize == 4)) {
     for (const auto &endOfChain : endsOfChain)
       InlineFunction(endOfChain, IFI);
   }
@@ -481,29 +573,35 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
 }
 
 bool SILVIAMuladd::runOnBasicBlock(BasicBlock &BB) {
-  assert((SILVIAMuladdOpSize == 8) &&
+  assert(((SILVIAMuladdOpSize == 8) || (SILVIAMuladdOpSize == 4)) &&
          "SILVIAMuladd: unexpected value for SILVIAMuladdOpSize."
-         "Possible values are: 8.");
+         "Possible values are: 4, 8.");
 
   // Get the SIMD function
   Module *module = BB.getParent()->getParent();
   MulAdd = module->getFunction(
       "_simd_muladd" + std::string(SILVIAMuladdInline ? "_inline_" : "_") +
-      "2");
+      std::to_string(16 / SILVIAMuladdOpSize));
   assert(MulAdd && "SIMD function not found");
 
   ExtractProdsSign = module->getFunction(
       "_simd_muladd_signed_extract" +
-      std::string(SILVIAMuladdInline ? "_inline_" : "_") + "2");
-  ExtractProdsUnsign = module->getFunction(
-      "_simd_muladd_unsigned_extract" +
-      std::string(SILVIAMuladdInline ? "_inline_" : "_") + "2");
-  assert((ExtractProdsSign && ExtractProdsUnsign) &&
-         "SIMD extract function not found");
+      std::string((SILVIAMuladdInline || (SILVIAMuladdOpSize == 4)) ? "_inline_"
+                                                                    : "_") +
+      std::to_string(16 / SILVIAMuladdOpSize));
+  assert(ExtractProdsSign && "SIMD extract signed function not found");
+  if (SILVIAMuladdOpSize == 8) {
+    ExtractProdsUnsign =
+        module->getFunction("_simd_muladd_unsigned_extract" +
+                            std::string(SILVIAMuladdInline ? "_inline_" : "_") +
+                            std::to_string(16 / SILVIAMuladdOpSize));
+    assert((ExtractProdsSign && ExtractProdsUnsign) &&
+           "SIMD extract unsigned function not found");
+  }
 
   auto modified = SILVIA::runOnBasicBlock(BB);
 
-  if (SILVIAMuladdInline && modified) {
+  if ((SILVIAMuladdInline || (SILVIAMuladdOpSize == 4)) && modified) {
     // InlineFunction may name some instructions with strings containing ".",
     // resulting in illegal RTL code: replace all "." with "_" characters in
     // the instruction names.

@@ -4,6 +4,40 @@ target triple = "fpga64-xilinx-none"
 
 @empty_0 = internal unnamed_addr constant [1 x i8] zeroinitializer
 
+define internal fastcc i32 @_simd_muladd_4(i4 %w0, i4 %w1, i4 %w2, i4 %w3, i5 %a, i32 %pcin) nounwind readnone noinline {
+entry:
+  call void (...)* @_ssdm_op_SpecPipeline(i32 1, i32 0, i32 0, i32 0, [1 x i8]* @empty_0)
+  call void (...)* @_ssdm_op_SpecLatency(i64 5, i64 5, [1 x i8]* @empty_0)
+  %w0_read = call i4 @_ssdm_op_Read.ap_auto.i4(i4 %w0) nounwind, !bitwidth !0
+  %w1_read = call i4 @_ssdm_op_Read.ap_auto.i4(i4 %w1) nounwind, !bitwidth !0
+  %w2_read = call i4 @_ssdm_op_Read.ap_auto.i4(i4 %w2) nounwind, !bitwidth !0
+  %w3_read = call i4 @_ssdm_op_Read.ap_auto.i4(i4 %w3) nounwind, !bitwidth !0
+  %a_read = call i5 @_ssdm_op_Read.ap_auto.i5(i5 %a) nounwind, !bitwidth !3
+  %w0_sext = sext i4 %w0_read to i8, !bitwidth !1
+  %w1_sext = sext i4 %w1_read to i8, !bitwidth !1
+  %w2_sext = sext i4 %w2_read to i8, !bitwidth !1
+  %w3_sext = sext i4 %w3_read to i8, !bitwidth !1
+  %a_sext = sext i5 %a_read to i8, !bitwidth !1
+  %p0 = mul i8 %w0_sext, %a_sext, !bitwidth !2
+  %p1 = mul i8 %w1_sext, %a_sext, !bitwidth !2
+  %p2 = mul i8 %w2_sext, %a_sext, !bitwidth !2
+  %p3 = mul i8 %w3_sext, %a_sext, !bitwidth !2
+  %P = call i32 @_ssdm_op_BitConcatenate.i32.i8.i8.i8.i8(i8 %p0, i8 %p1, i8 %p2, i8 %p3), !bitwidth !4
+  ret i32 %P, !bitwidth !1599
+}
+
+define internal fastcc { i8, i8, i8, i8 } @_simd_muladd_signed_extract_inline_4(i32 %M_val) nounwind readnone {
+  %p3 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 0, i32 7), !bitwidth !5
+  %p2 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 8, i32 15), !bitwidth !5
+  %p1 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 16, i32 23), !bitwidth !5
+  %p0 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 24, i32 31), !bitwidth !5
+  %P0 = insertvalue { i8, i8, i8, i8 } undef, i8 %p0, 0, !bitwidth !1599
+  %P1 = insertvalue { i8, i8, i8, i8 } %P0, i8 %p1, 1, !bitwidth !1599
+  %P2 = insertvalue { i8, i8, i8, i8 } %P1, i8 %p2, 2, !bitwidth !1599
+  %P3 = insertvalue { i8, i8, i8, i8 } %P2, i8 %p3, 3, !bitwidth !1599
+  ret { i8, i8, i8, i8 } %P3, !bitwidth !1599
+}
+
 define internal fastcc i36 @_simd_muladd_2(i9 %a_val, i9 %d_val, i9 %b_val, i36 %PCIN_val) nounwind readnone noinline {
 entry:
   call void (...)* @_ssdm_op_SpecPipeline(i32 1, i32 0, i32 0, i32 0, [1 x i8]* @empty_0)
@@ -97,9 +131,24 @@ entry:
   ret i36 %0
 }
 
+define weak i32 @_ssdm_op_Read.ap_auto.i32(i32) {
+entry:
+  ret i32 %0
+}
+
 define weak i9 @_ssdm_op_Read.ap_auto.i9(i9) {
 entry:
   ret i9 %0
+}
+
+define weak i5 @_ssdm_op_Read.ap_auto.i5(i5) {
+entry:
+  ret i5 %0
+}
+
+define weak i4 @_ssdm_op_Read.ap_auto.i4(i4) {
+entry:
+  ret i4 %0
 }
 
 define weak i1 @_ssdm_op_BitSelect.i1.i36.i32(i36, i32) nounwind readnone {
@@ -111,6 +160,21 @@ entry:
   ret i1 %empty_9
 }
 
+define weak i32 @_ssdm_op_BitConcatenate.i32.i8.i8.i8.i8(i8, i8, i8, i8) nounwind readnone {
+entry:
+  %zext_0 = zext i8 %0 to i32
+  %zext_1 = zext i8 %1 to i32
+  %zext_2 = zext i8 %2 to i32
+  %zext_3 = zext i8 %3 to i32
+  %shl_0 = shl i32 %zext_0, 24
+  %shl_1 = shl i32 %zext_1, 16
+  %shl_2 = shl i32 %zext_2, 8
+  %res_0_1 = or i32 %shl_0, %shl_1
+  %res_0_1_2 = or i32 %res_0_1, %shl_2
+  %res = or i32 %res_0_1_2, %zext_3
+  ret i32 %res
+}
+
 define weak i27 @_ssdm_op_BitConcatenate.i27.i9.i18(i9, i18) nounwind readnone {
 entry:
   %empty = zext i9 %0 to i27
@@ -120,6 +184,13 @@ entry:
   ret i27 %empty_12
 }
 
+define weak i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32, i32, i32) nounwind readnone {
+entry:
+  %empty = call i32 @llvm.part.select.i32(i32 %0, i32 %1, i32 %2)
+  %empty_6 = trunc i32 %empty to i8
+  ret i8 %empty_6
+}
+
 define weak i18 @_ssdm_op_PartSelect.i18.i36.i32.i32(i36, i32, i32) nounwind readnone {
 entry:
   %empty = call i36 @llvm.part.select.i36(i36 %0, i32 %1, i32 %2)
@@ -127,8 +198,15 @@ entry:
   ret i18 %empty_6
 }
 
+declare i32 @llvm.part.select.i32(i32, i32, i32) nounwind readnone
 declare i36 @llvm.part.select.i36(i36, i32, i32) nounwind readnone
 
+!0 = metadata !{i32 4, i32 4, i32 0, i32 2}
+!1 = metadata !{i32 8, i32 8, i32 0, i32 1}
+!2 = metadata !{i32 8, i32 8, i32 0, i32 2}
+!3 = metadata !{i32 5, i32 5, i32 0, i32 2}
+!4 = metadata !{i32 32, i32 32, i32 0, i32 1}
+!5 = metadata !{i32 32, i32 32, i32 0, i32 2}
 !1548 = metadata !{i32 9, i32 9, i32 0, i32 2}
 !1552 = metadata !{i32 36, i32 36, i32 0, i32 2}
 !1561 = metadata !{i32 36, i32 36, i32 0, i32 2}

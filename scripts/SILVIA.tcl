@@ -62,7 +62,7 @@ namespace eval SILVIA {
 			append opt_cmd " -load ${LLVM_ROOT}/lib/LLVMSILVIA[string toupper ${op} 0 0].so"
 			append opt_cmd " -basicaa -silvia-${op}"
 			set factor 2
-			if {(${op} == "add" || ${op} == "mul") && [dict exist ${pass} FACTOR]} {
+			if {(${op} == "add") && [dict exist ${pass} FACTOR]} {
 				set factor [dict get ${pass} FACTOR]
 			}
 			set op_size 8
@@ -72,13 +72,10 @@ namespace eval SILVIA {
 			if {${op} == "add"} {
 				append opt_cmd " -silvia-add-op=${instruction} -silvia-add-simd-factor=${factor}"
 			}
-			if {${op} == "mul"} {
-				append opt_cmd " -silvia-mul-simd-factor=${factor}"
-			}
 			if {${op} == "muladd"} {
 				append opt_cmd " -silvia-muladd-op-size=${op_size}"
 			}
-			if {(${op} == "mul" || ${op} == "muladd") && [dict exist ${pass} INLINE]} {
+			if {(${op} == "muladd") && [dict exist ${pass} INLINE]} {
 				append opt_cmd " -silvia-${op}-inline=[dict get ${pass} INLINE]"
 			}
 			if {${op} == "muladd" && [dict exist ${pass} MAX_CHAIN_LEN]} {
@@ -111,10 +108,6 @@ namespace eval SILVIA {
 				set op_size [dict get ${pass} OP_SIZE]
 			}
 
-			if {${op} == "mul" && ${factor} != 4} {
-				continue
-			}
-
 			if {(${op} == "muladd") && (${op_size} != 4)} {
 				continue
 			} else {
@@ -126,8 +119,6 @@ namespace eval SILVIA {
 				if {[dict exist ${pass} INST]} {
 					set instruction [dict get ${pass} INST]
 				}
-			} elseif {${op} == "mul"} {
-				set instruction "mul_signed"
 			} elseif {${op} == "muladd"} {
 				set instruction "muladd"
 			}

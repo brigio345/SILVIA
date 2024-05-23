@@ -445,6 +445,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
         pack.leaves.push_back((op[0] != commonOperand) ? op[0] : op[1]);
         pack.name +=
             ((pack.name == "") ? "" : "_") + std::string(leaf->getName());
+	DEBUG(packedLeaves++);
       } else {
         pack.leaves.push_back(
             ConstantInt::get(IntegerType::get(context, SILVIAMuladdOpSize), 0));
@@ -564,8 +565,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
       InlineFunction(endOfChain, IFI);
   }
 
-  DEBUG(packedTrees += 2);
-  DEBUG(packedLeaves += (2 * leavesPacks.size()));
+  DEBUG(packedTrees += instTuple.size());
 
   return rootStruct;
 }

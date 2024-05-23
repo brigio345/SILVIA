@@ -46,7 +46,8 @@ struct SILVIAMuladd : public SILVIA {
   Value *packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
                    Instruction *insertBefore, LLVMContext &context) override;
 
-  Function *MulAdd;
+  Function *MulAddSign;
+  Function *MulAddUnsign;
   Function *ExtractProdsSign;
   Function *ExtractProdsUnsign;
   unsigned long packedTrees;
@@ -369,6 +370,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
 
   SmallVector<LeavesPack, 8> leavesPacks;
   SmallVector<int, 4> ext(instTuple.size());
+  unsigned notCommonOpSign = 0;
   // Populate leavesPacks and toAdd with muls from unpackedMuls.
   for (unsigned i = 0; i < unpackedMuls[0].size(); ++i) {
     SmallVector<Instruction *, 4> compatibleLeaves(unpackedMuls.size(),
@@ -397,13 +399,8 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
           const auto notCommonSelOp =
               ((selOp[0] != commonOperand) ? selOp[0] : selOp[1]);
           if (const auto notCommonSelOpInst =
-                  dyn_cast<Instruction>(notCommonSelOp)) {
-            if ((SILVIAMuladdOpSize == 4) &&
-                (notCommonSelOpInst->getOpcode() == Instruction::ZExt)) {
-              unpackedMuls[j].push_back(mulLeaf);
-              continue;
-            }
-          }
+                  dyn_cast<Instruction>(notCommonSelOp))
+            notCommonOpSign = notCommonSelOpInst->getOpcode();
         }
         if (commonOperand &&
             ((op[0] != commonOperand) && (op[1] != commonOperand))) {
@@ -414,7 +411,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
         const auto notCommonOp = ((op[0] != commonOperand) ? op[0] : op[1]);
         if (const auto notCommonOpInst = dyn_cast<Instruction>(notCommonOp)) {
           if ((SILVIAMuladdOpSize == 4) &&
-              (notCommonOpInst->getOpcode() == Instruction::ZExt)) {
+              (notCommonOpInst->getOpcode() != notCommonOpSign)) {
             unpackedMuls[j].push_back(mulLeaf);
             continue;
           }
@@ -471,10 +468,10 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
     maxChainLength = SILVIAMuladdMaxChainLen;
   int numChains = std::ceil(leavesPacks.size() / ((float)maxChainLength));
   int balancedChainLength = std::ceil(leavesPacks.size() / ((float)numChains));
+  auto MulAdd =
+      ((notCommonOpSign == Instruction::SExt) ? MulAddSign : MulAddUnsign);
   auto ExtractProds =
-      (((SILVIAMuladdOpSize == 4) || (ext[1] == Instruction::SExt))
-           ? ExtractProdsSign
-           : ExtractProdsUnsign);
+      ((ext[1] == Instruction::SExt) ? ExtractProdsSign : ExtractProdsUnsign);
 
   const unsigned packedProdSize = ((SILVIAMuladdOpSize == 8) ? 36 : 32);
   Value *P = ConstantInt::get(IntegerType::get(context, packedProdSize), 0);
@@ -557,7 +554,8 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
     rootStruct = builder.CreateInsertValue(rootStruct, sums[i], i);
 
   InlineFunctionInfo IFI;
-  if (SILVIAMuladdInline) {
+  if (SILVIAMuladdInline ||
+      ((SILVIAMuladdOpSize == 4) && (MulAdd == MulAddUnsign))) {
     for (const auto &P : mulAddCalls)
       InlineFunction(P, IFI);
   }
@@ -579,25 +577,35 @@ bool SILVIAMuladd::runOnBasicBlock(BasicBlock &BB) {
 
   // Get the SIMD function
   Module *module = BB.getParent()->getParent();
-  MulAdd = module->getFunction(
-      "_simd_muladd" + std::string(SILVIAMuladdInline ? "_inline_" : "_") +
-      std::to_string(16 / SILVIAMuladdOpSize));
-  assert(MulAdd && "SIMD function not found");
 
-  ExtractProdsSign = module->getFunction(
-      "_simd_muladd_signed_extract" +
-      std::string((SILVIAMuladdInline || (SILVIAMuladdOpSize == 4)) ? "_inline_"
+  MulAddSign = module->getFunction(
+      "_simd_muladd" + std::string((SILVIAMuladdOpSize == 4) ? "_signed" : "") +
+      std::string(((SILVIAMuladdOpSize == 8) && SILVIAMuladdInline) ? "_inline_"
                                                                     : "_") +
       std::to_string(16 / SILVIAMuladdOpSize));
-  assert(ExtractProdsSign && "SIMD extract signed function not found");
-  if (SILVIAMuladdOpSize == 8) {
-    ExtractProdsUnsign =
-        module->getFunction("_simd_muladd_unsigned_extract" +
-                            std::string(SILVIAMuladdInline ? "_inline_" : "_") +
-                            std::to_string(16 / SILVIAMuladdOpSize));
-    assert((ExtractProdsSign && ExtractProdsUnsign) &&
-           "SIMD extract unsigned function not found");
-  }
+  MulAddUnsign =
+      ((SILVIAMuladdOpSize == 8)
+           ? MulAddSign
+           : module->getFunction("_simd_muladd_unsigned_" +
+                                 std::to_string(16 / SILVIAMuladdOpSize)));
+  assert((MulAddSign && MulAddUnsign) && "SIMD function not found");
+
+  ExtractProdsSign = module->getFunction(
+      "_simd_muladd" + std::string((SILVIAMuladdOpSize == 8) ? "_signed" : "") +
+      "_extract" +
+      std::string(((SILVIAMuladdOpSize == 8) && SILVIAMuladdInline) ? "_inline_"
+                                                                    : "_") +
+      std::to_string(16 / SILVIAMuladdOpSize));
+  ExtractProdsUnsign =
+      ((SILVIAMuladdOpSize == 8)
+           ? module->getFunction(
+                 "_simd_muladd_unsigned_extract" +
+                 std::string(SILVIAMuladdInline ? "_inline_" : "_") +
+                 std::to_string(16 / SILVIAMuladdOpSize))
+           : ExtractProdsSign);
+
+  assert((ExtractProdsSign && ExtractProdsUnsign) &&
+         "SIMD extract function not found");
 
   auto modified = SILVIA::runOnBasicBlock(BB);
 

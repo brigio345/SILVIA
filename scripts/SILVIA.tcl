@@ -120,7 +120,7 @@ namespace eval SILVIA {
 					set instruction [dict get ${pass} INST]
 				}
 			} elseif {${op} == "muladd"} {
-				set instruction "muladd"
+				set instruction "muladd_signed"
 			}
 			set operator "+"
 			if {${instruction} == "sub"} {

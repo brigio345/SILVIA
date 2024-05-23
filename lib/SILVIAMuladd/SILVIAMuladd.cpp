@@ -373,7 +373,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   unsigned notCommonOpSign = 0;
   // Populate leavesPacks and toAdd with muls from unpackedMuls.
   for (unsigned i = 0; i < unpackedMuls[0].size(); ++i) {
-    SmallVector<Instruction *, 4> compatibleLeaves(unpackedMuls.size(),
+    SmallVector<Instruction *, 4> compatibleLeaves((16 / SILVIAMuladdOpSize),
                                                    nullptr);
     Value *commonOperand = nullptr;
     compatibleLeaves[0] = unpackedMuls[0].front();

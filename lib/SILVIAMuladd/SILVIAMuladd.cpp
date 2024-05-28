@@ -134,15 +134,28 @@ std::list<SILVIA::Candidate> SILVIAMuladd::getCandidates(BasicBlock &BB) {
     const auto opcode = I->getOpcode();
     if ((opcode == Instruction::Add) || (opcode == Instruction::Mul)) {
       bool subset = false;
-      for (const auto &tree : trees) {
-        for (const auto &add : tree.addInternal) {
-          if (add == I) {
-            subset = true;
+      if (opcode == Instruction::Add) {
+        for (const auto &tree : trees) {
+          for (const auto &add : tree.addInternal) {
+            if (add == I) {
+              subset = true;
+              break;
+            }
+          }
+          if (subset)
             break;
+        }
+      } else {
+        for (const auto &tree : trees) {
+          for (const auto &inVal : tree.candidate.inVals) {
+            if (inVal == I) {
+              subset = true;
+              break;
+            }
+            if (subset)
+              break;
           }
         }
-        if (subset)
-          break;
       }
 
       if (subset)
@@ -445,7 +458,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
         pack.leaves.push_back((op[0] != commonOperand) ? op[0] : op[1]);
         pack.name +=
             ((pack.name == "") ? "" : "_") + std::string(leaf->getName());
-	DEBUG(packedLeaves++);
+        DEBUG(packedLeaves++);
       } else {
         pack.leaves.push_back(
             ConstantInt::get(IntegerType::get(context, SILVIAMuladdOpSize), 0));

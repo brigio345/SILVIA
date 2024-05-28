@@ -372,7 +372,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   SmallVector<int, 4> ext(instTuple.size());
   unsigned notCommonOpSign = 0;
   // Populate leavesPacks and toAdd with muls from unpackedMuls.
-  for (unsigned i = 0; i < unpackedMuls[0].size(); ++i) {
+  for (unsigned i = 0, iEnd = unpackedMuls[0].size(); i < iEnd; ++i) {
     SmallVector<Instruction *, 4> compatibleLeaves((16 / SILVIAMuladdOpSize),
                                                    nullptr);
     Value *commonOperand = nullptr;
@@ -380,7 +380,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
     unpackedMuls[0].pop_front();
     if (leavesPacks.size() == 0)
       ext[0] = SILVIA::getExtOpcode(compatibleLeaves[0]);
-    for (unsigned j = 1; j < unpackedMuls.size(); ++j) {
+    for (unsigned j = 1, jEnd = unpackedMuls.size(); j < jEnd; ++j) {
       for (unsigned k = 0; k < unpackedMuls[j].size(); ++k) {
         auto mulLeaf = unpackedMuls[j].front();
         unpackedMuls[j].pop_front();

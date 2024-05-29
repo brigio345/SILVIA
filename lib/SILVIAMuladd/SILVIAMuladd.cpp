@@ -70,6 +70,10 @@ static cl::opt<int>
                             cl::desc("The maximum length of a chain of DSPs."));
 
 static cl::opt<bool>
+    SILVIAMuladdMulOnly("silvia-muladd-mul-only", cl::init(false), cl::Hidden,
+                       cl::desc("Whether to pack muladd or mul operations."));
+
+static cl::opt<bool>
     SILVIAMuladdInline("silvia-muladd-inline", cl::init(false), cl::Hidden,
                        cl::desc("Whether to inline the packed operations."));
 
@@ -84,6 +88,9 @@ void getAddTree(Instruction *root, SILVIAMuladd::AddTree &tree) {
     tree.candidate.outInst = root;
     return;
   }
+
+  if (SILVIAMuladdMulOnly)
+    return;
 
   for (unsigned i = 0; i < root->getNumOperands(); ++i) {
     auto op = root->getOperand(i);

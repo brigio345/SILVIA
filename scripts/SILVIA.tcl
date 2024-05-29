@@ -81,6 +81,9 @@ namespace eval SILVIA {
 			if {${op} == "muladd" && [dict exist ${pass} MAX_CHAIN_LEN]} {
 				append opt_cmd " -silvia-muladd-max-chain-len=[dict get ${pass} MAX_CHAIN_LEN]"
 			}
+			if {${op} == "muladd" && [dict exist ${pass} MUL_ONLY]} {
+				append opt_cmd " -silvia-muladd-mul-only=[dict get ${pass} MUL_ONLY]"
+			}
 			append opt_cmd " -dce ${dut_path}/a.o.3.bc -o ${dut_path}/a.o.3.bc"
 			if {${DEBUG} == 1} {
 				append opt_cmd " |& cat | tee -a ${DEBUG_FILE}"

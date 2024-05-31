@@ -71,7 +71,7 @@ static cl::opt<int>
 
 static cl::opt<bool>
     SILVIAMuladdMulOnly("silvia-muladd-mul-only", cl::init(false), cl::Hidden,
-                       cl::desc("Whether to pack muladd or mul operations."));
+                        cl::desc("Whether to pack muladd or mul operations."));
 
 static cl::opt<bool>
     SILVIAMuladdInline("silvia-muladd-inline", cl::init(false), cl::Hidden,
@@ -611,18 +611,15 @@ bool SILVIAMuladd::runOnBasicBlock(BasicBlock &BB) {
   assert((MulAddSign && MulAddUnsign) && "SIMD function not found");
 
   ExtractProdsSign = module->getFunction(
-      "_simd_muladd" + std::string((SILVIAMuladdOpSize == 8) ? "_signed" : "") +
-      "_extract" +
+      "_simd_muladd_signed_extract" +
       std::string(((SILVIAMuladdOpSize == 8) && SILVIAMuladdInline) ? "_inline_"
                                                                     : "_") +
       std::to_string(16 / SILVIAMuladdOpSize));
-  ExtractProdsUnsign =
-      ((SILVIAMuladdOpSize == 8)
-           ? module->getFunction(
-                 "_simd_muladd_unsigned_extract" +
-                 std::string(SILVIAMuladdInline ? "_inline_" : "_") +
-                 std::to_string(16 / SILVIAMuladdOpSize))
-           : ExtractProdsSign);
+  ExtractProdsUnsign = module->getFunction(
+      "_simd_muladd_unsigned_extract" +
+      std::string(((SILVIAMuladdOpSize == 8) && SILVIAMuladdInline) ? "_inline_"
+                                                                    : "_") +
+      std::to_string(16 / SILVIAMuladdOpSize));
 
   assert((ExtractProdsSign && ExtractProdsUnsign) &&
          "SIMD extract function not found");

@@ -26,37 +26,58 @@ entry:
   ret i32 %P, !bitwidth !1599
 }
 
-define internal fastcc i32 @_simd_muladd_unsigned_4(i4 %a0_val, i4 %a1_val, i4 %a2_val, i4 %a3_val, i4 %w_val, i32 %pcin) nounwind readnone {
+define internal fastcc { i32, i1, i1, i1 } @_simd_muladd_unsigned_4(i4 %a0_val, i4 %a1_val, i4 %a2_val, i4 %a3_val, i5 %w_val, i32 %pcin) nounwind readnone {
 entry:
-  %trunc_ln26 = trunc i4 %a0_val to i1, !bitwidth !1652
   %lshr_ln = call i3 @_ssdm_op_PartSelect.i3.i4.i32.i32(i4 %a0_val, i32 1, i32 3), !bitwidth !1492
   %zext_ln26 = zext i3 %lshr_ln to i4, !bitwidth !1493
   %A = call i27 @_ssdm_op_BitConcatenate.i27.i4.i4.i4.i4.i4.i3.i4(i4 %a3_val, i4 0, i4 %a2_val, i4 0, i4 %a1_val, i3 0, i4 %zext_ln26), !bitwidth !1494
   %zext_ln29 = zext i27 %A to i31, !bitwidth !1529
-  %sext_ln29 = sext i4 %w_val to i31, !bitwidth !1530
+  %sext_ln29 = sext i5 %w_val to i31, !bitwidth !1530
   %P = mul i31 %zext_ln29, %sext_ln29, !bitwidth !1531
-  %trunc_ln31 = trunc i31 %P to i7, !bitwidth !6
-  %shl_ln = call i8 @_ssdm_op_BitConcatenate.i8.i7.i1(i7 %trunc_ln31, i1 false), !bitwidth !2
-  %select_ln31 = select i1 %trunc_ln26, i4 %w_val, i4 0, !bitwidth !0
-  %sext_ln31 = sext i4 %select_ln31 to i8, !bitwidth !1
-  %add_ln31 = add i8 %shl_ln, %sext_ln31, !bitwidth !2
-  %tmp_s = call i8 @_ssdm_op_PartSelect.i8.i31.i32.i32(i31 %P, i32 7, i32 14), !bitwidth !2
-  %tmp = call i1 @_ssdm_op_BitSelect.i1.i31.i32(i31 %P, i32 6), !bitwidth !1652
-  %zext_ln32 = zext i1 %tmp to i8, !bitwidth !1566
-  %add_ln32 = add i8 %tmp_s, %zext_ln32, !bitwidth !2
-  %tmp_1 = call i8 @_ssdm_op_PartSelect.i8.i31.i32.i32(i31 %P, i32 15, i32 22), !bitwidth !2
-  %tmp_2 = call i1 @_ssdm_op_BitSelect.i1.i31.i32(i31 %P, i32 14), !bitwidth !1652
-  %zext_ln33 = zext i1 %tmp_2 to i8, !bitwidth !1566
-  %add_ln33 = add i8 %tmp_1, %zext_ln33, !bitwidth !2
-  %tmp_3 = call i8 @_ssdm_op_PartSelect.i8.i31.i32.i32(i31 %P, i32 23, i32 30), !bitwidth !2
-  %tmp_4 = call i1 @_ssdm_op_BitSelect.i1.i31.i32(i31 %P, i32 22), !bitwidth !1652
-  %zext_ln34 = zext i1 %tmp_4 to i8, !bitwidth !1566
-  %add_ln34 = add i8 %tmp_3, %zext_ln34, !bitwidth !2
-  %prods = call i32 @_ssdm_op_BitConcatenate.i32.i8.i8.i8.i8(i8 %add_ln31, i8 %add_ln32, i8 %add_ln33, i8 %add_ln34), !bitwidth !4
-  ret i32 %prods, !bitwidth !1599
+  %p0_msbs = trunc i31 %P to i7, !bitwidth !6
+  %shl_p0_msbs = call i8 @_ssdm_op_BitConcatenate.i8.i7.i1(i7 %p0_msbs, i1 false), !bitwidth !2
+  %a0_lsb = trunc i4 %a0_val to i1, !bitwidth !1652
+  %p0_correction = select i1 %a0_lsb, i5 %w_val, i5 0, !bitwidth !0
+  %sext_p0_correction = sext i5 %p0_correction to i8, !bitwidth !1
+  %p0 = add i8 %shl_p0_msbs, %sext_p0_correction, !bitwidth !2
+  %p1 = call i8 @_ssdm_op_PartSelect.i8.i31.i32.i32(i31 %P, i32 7, i32 14), !bitwidth !2
+  %p2 = call i8 @_ssdm_op_PartSelect.i8.i31.i32.i32(i31 %P, i32 15, i32 22), !bitwidth !2
+  %p3 = call i8 @_ssdm_op_PartSelect.i8.i31.i32.i32(i31 %P, i32 23, i32 30), !bitwidth !2
+  %p1_correction = call i1 @_ssdm_op_BitSelect.i1.i31.i32(i31 %P, i32 6), !bitwidth !1652
+  %p2_correction = call i1 @_ssdm_op_BitSelect.i1.i31.i32(i31 %P, i32 14), !bitwidth !1652
+  %p3_correction = call i1 @_ssdm_op_BitSelect.i1.i31.i32(i31 %P, i32 22), !bitwidth !1652
+  %prods = call i32 @_ssdm_op_BitConcatenate.i32.i8.i8.i8.i8(i8 %p0, i8 %p1, i8 %p2, i8 %p3), !bitwidth !4
+  %prods0 = insertvalue { i32, i1, i1, i1 } undef, i32 %prods, 0, !bitwidth !1599
+  %prods1 = insertvalue { i32, i1, i1, i1 } %prods0, i1 %p1_correction, 1, !bitwidth !1599
+  %prods2 = insertvalue { i32, i1, i1, i1 } %prods1, i1 %p2_correction, 2, !bitwidth !1599
+  %prods3 = insertvalue { i32, i1, i1, i1 } %prods2, i1 %p3_correction, 3, !bitwidth !1599
+  ret { i32, i1, i1, i1 } %prods3, !bitwidth !1599
 }
 
-define internal fastcc { i8, i8, i8, i8 } @_simd_muladd_extract_4(i32 %M_val) nounwind readnone {
+define internal fastcc { i8, i8, i8, i8 } @_simd_muladd_signed_extract_4({ i32, i1, i1, i1 } %prods) nounwind readnone {
+  %M_val = extractvalue { i32, i1, i1, i1 } %prods, 0, !bitwidth !4
+  %p0 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 0, i32 7), !bitwidth !5
+  %p1 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 8, i32 15), !bitwidth !5
+  %p2 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 16, i32 23), !bitwidth !5
+  %p3 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 24, i32 31), !bitwidth !5
+  %p1_correction = extractvalue { i32, i1, i1, i1 } %prods, 1, !bitwidth !1652
+  %zext_p1_correction = zext i1 %p1_correction to i8, !bitwidth !1566
+  %p1_corrected = add i8 %p1, %zext_p1_correction, !bitwidth !2
+  %p2_correction = extractvalue { i32, i1, i1, i1 } %prods, 2, !bitwidth !1652
+  %zext_p2_correction = zext i1 %p2_correction to i8, !bitwidth !1566
+  %p2_corrected = add i8 %p2, %zext_p2_correction, !bitwidth !2
+  %p3_correction = extractvalue { i32, i1, i1, i1 } %prods, 3, !bitwidth !1652
+  %zext_p3_correction = zext i1 %p3_correction to i8, !bitwidth !1566
+  %p3_corrected = add i8 %p3, %zext_p3_correction, !bitwidth !2
+  %P0 = insertvalue { i8, i8, i8, i8 } undef, i8 %p3_corrected, 0, !bitwidth !1599
+  %P1 = insertvalue { i8, i8, i8, i8 } %P0, i8 %p2_corrected, 1, !bitwidth !1599
+  %P2 = insertvalue { i8, i8, i8, i8 } %P1, i8 %p1_corrected, 2, !bitwidth !1599
+  %P3 = insertvalue { i8, i8, i8, i8 } %P2, i8 %p0, 3, !bitwidth !1599
+  ret { i8, i8, i8, i8 } %P3, !bitwidth !1599
+}
+
+define internal fastcc { i8, i8, i8, i8 } @_simd_muladd_unsigned_extract_4({ i32, i1, i1, i1 } %prods) nounwind readnone {
+  %M_val = extractvalue { i32, i1, i1, i1 } %prods, 0, !bitwidth !4
   %p3 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 0, i32 7), !bitwidth !5
   %p2 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 8, i32 15), !bitwidth !5
   %p1 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 16, i32 23), !bitwidth !5

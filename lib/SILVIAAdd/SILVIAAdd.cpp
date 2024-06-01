@@ -36,8 +36,8 @@ static RegisterPass<SILVIAAdd> X("silvia-add", "Pack adds to SIMD DSPs",
                                  true /* Transformation Pass */);
 
 static cl::opt<unsigned int>
-    SIMDFactor("silvia-add-simd-factor", cl::init(4), cl::Hidden,
-               cl::desc("The amount of adds to pack to SIMD DSPs."));
+    SILVIAAddOpSize("silvia-add-op-size", cl::init(12), cl::Hidden,
+                    cl::desc("The maximum size in bits of the addends."));
 
 static cl::opt<std::string> SIMDOp(
     "silvia-add-op", cl::init("add"), cl::Hidden,
@@ -52,15 +52,13 @@ static cl::opt<unsigned int> DSPWidth("silvia-add-dsp-width", cl::init(48),
 std::list<SILVIA::Candidate> SILVIAAdd::getCandidates(BasicBlock &BB) {
   std::list<SILVIA::Candidate> candidateInsts;
 
-  const auto addMaxWidth = (DSPWidth / SIMDFactor);
-
   auto instTy = ((SIMDOp == "add") ? Instruction::Add : Instruction::Sub);
   for (auto &I : BB) {
     if (I.getOpcode() != instTy)
       continue;
     if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1)))
       continue;
-    if (I.getType()->getScalarSizeInBits() <= addMaxWidth) {
+    if (I.getType()->getScalarSizeInBits() <= SILVIAAddOpSize) {
       SILVIA::Candidate candidate;
       for (unsigned i = 0; i < I.getNumOperands(); ++i)
         candidate.inVals.push_back(I.getOperand(i));
@@ -78,18 +76,16 @@ bool SILVIAAdd::isCandidateCompatibleWithTuple(
 }
 
 bool SILVIAAdd::isTupleFull(SmallVector<SILVIA::Candidate, 4> &tuple) {
-  return (tuple.size() == SIMDFactor);
+  return (tuple.size() == (DSPWidth / SILVIAAddOpSize));
 }
 
 Value *SILVIAAdd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
                             Instruction *insertBefore, LLVMContext &context) {
   IRBuilder<> builder(insertBefore);
 
-  const auto dataBitWidth = (DSPWidth / SIMDFactor);
-
   SmallVector<Value *, 8> args(
       SIMDFunc->getArgumentList().size(),
-      ConstantInt::get(IntegerType::get(context, dataBitWidth), 0));
+      ConstantInt::get(IntegerType::get(context, SILVIAAddOpSize), 0));
   std::string retName = "";
   for (unsigned i = 0; i < instTuple.size(); ++i) {
     retName = retName + ((retName == "") ? "" : "_") +
@@ -98,9 +94,9 @@ Value *SILVIAAdd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
     for (unsigned j = 0; j < addInst->getNumOperands(); ++j) {
       auto operand = addInst->getOperand(j);
 
-      auto arg = ((operand->getType()->getScalarSizeInBits() < dataBitWidth)
+      auto arg = ((operand->getType()->getScalarSizeInBits() < SILVIAAddOpSize)
                       ? builder.CreateZExt(
-                            operand, IntegerType::get(context, dataBitWidth),
+                            operand, IntegerType::get(context, SILVIAAddOpSize),
                             operand->getName() + "_zext")
                       : operand);
       args[i * addInst->getNumOperands() + j] = arg;
@@ -113,7 +109,8 @@ Value *SILVIAAdd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   for (unsigned i = 0; i < instTuple.size(); ++i) {
     adds[i] = builder.CreateExtractValue(
         sumAggr, i, instTuple[i].outInst->getName() + "_zext");
-    if (instTuple[i].outInst->getType()->getScalarSizeInBits() < dataBitWidth)
+    if (instTuple[i].outInst->getType()->getScalarSizeInBits() <
+        SILVIAAddOpSize)
       adds[i] = builder.CreateTrunc(adds[i], instTuple[i].outInst->getType());
   }
 
@@ -132,14 +129,15 @@ Value *SILVIAAdd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
 }
 
 bool SILVIAAdd::runOnBasicBlock(BasicBlock &BB) {
-  assert(((SIMDFactor == 2) || (SIMDFactor == 4)) &&
-         "Unexpected value for silvia-simd-factor option.");
+  assert(((SILVIAAddOpSize == 12) || (SILVIAAddOpSize == 24)) &&
+         "Unexpected value for silvia-op-size option."
+         "Possible values are: 12, 24.");
   assert((DSPWidth == 48) && "Unexpected value for silvia-dsp-width option.");
 
   // Get the SIMD function
   Module *module = BB.getParent()->getParent();
-  SIMDFunc =
-      module->getFunction("_simd_" + SIMDOp + "_" + std::to_string(SIMDFactor));
+  SIMDFunc = module->getFunction("_simd_" + SIMDOp + "_" +
+                                 std::to_string(SILVIAAddOpSize) + "b");
   assert(SIMDFunc && "SIMD function not found");
 
   return SILVIA::runOnBasicBlock(BB);

@@ -4,7 +4,7 @@ target triple = "fpga64-xilinx-none"
 
 @empty = internal unnamed_addr constant [1 x i8] zeroinitializer
 
-define internal fastcc { i12, i12, i12, i12 } @_simd_add_4(i12 %a0_val, i12 %b0_val, i12 %a1_val, i12 %b1_val, i12 %a2_val, i12 %b2_val, i12 %a3_val, i12 %b3_val) nounwind readnone noinline {
+define internal fastcc { i12, i12, i12, i12 } @_simd_add_12b(i12 %a0_val, i12 %b0_val, i12 %a1_val, i12 %b1_val, i12 %a2_val, i12 %b2_val, i12 %a3_val, i12 %b3_val) nounwind readnone noinline {
 entry:
   call void (...)* @_ssdm_op_SpecPipeline(i32 1, i32 0, i32 0, i32 0, [1 x i8]* @empty)
   call void (...)* @_ssdm_op_SpecLatency(i64 1, i64 1, [1 x i8]* @empty)
@@ -27,7 +27,7 @@ entry:
   ret { i12, i12, i12, i12 } %mrv_3, !bitwidth !1
 }
 
-define internal fastcc { i24, i24 } @_simd_add_2(i24 %a0_val, i24 %b0_val, i24 %a1_val, i24 %b1_val) nounwind readnone noinline {
+define internal fastcc { i24, i24 } @_simd_add_24b(i24 %a0_val, i24 %b0_val, i24 %a1_val, i24 %b1_val) nounwind readnone noinline {
 entry:
   call void (...)* @_ssdm_op_SpecPipeline(i32 1, i32 0, i32 0, i32 0, [1 x i8]* @empty)
   call void (...)* @_ssdm_op_SpecLatency(i64 1, i64 1, [1 x i8]* @empty)

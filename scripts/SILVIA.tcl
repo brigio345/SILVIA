@@ -61,19 +61,23 @@ namespace eval SILVIA {
 			}
 			append opt_cmd " -load ${LLVM_ROOT}/lib/LLVMSILVIA[string toupper ${op} 0 0].so"
 			append opt_cmd " -basicaa -silvia-${op}"
-			set factor 2
-			if {(${op} == "add") && [dict exist ${pass} FACTOR]} {
-				set factor [dict get ${pass} FACTOR]
-			}
-			set op_size 8
-			if {(${op} == "muladd") && [dict exist ${pass} OP_SIZE]} {
-				set op_size [dict get ${pass} OP_SIZE]
-			}
 			if {${op} == "add"} {
-				append opt_cmd " -silvia-add-op=${instruction} -silvia-add-simd-factor=${factor}"
+				set op_size 12
+				if {[dict exist ${pass} OP_SIZE]} {
+					set op_size [dict get ${pass} OP_SIZE]
+				}
 			}
 			if {${op} == "muladd"} {
-				append opt_cmd " -silvia-muladd-op-size=${op_size}"
+				set op_size 8
+				if {[dict exist ${pass} OP_SIZE]} {
+					set op_size [dict get ${pass} OP_SIZE]
+				}
+			}
+			if {(${op} == "add") || (${op} == "muladd")} {
+				append opt_cmd " -silvia-${op}-op-size=${op_size}"
+			}
+			if {${op} == "add"} {
+				append opt_cmd " -silvia-add-op=${instruction}"
 			}
 			if {(${op} == "muladd") && [dict exist ${pass} INLINE]} {
 				append opt_cmd " -silvia-${op}-inline=[dict get ${pass} INLINE]"
@@ -101,20 +105,19 @@ namespace eval SILVIA {
 				continue
 			}
 			set op [dict get ${pass} OP]
-			set factor 2
-			if {[dict exist ${pass} FACTOR]} {
-				set factor [dict get ${pass} FACTOR]
+
+			if {${op} == "add"} {
+				set op_size 12
+			} elseif {${op} == "muladd"} {
+				set op_size 8
 			}
 
-			set op_size 8
 			if {[dict exist ${pass} OP_SIZE]} {
 				set op_size [dict get ${pass} OP_SIZE]
 			}
 
 			if {(${op} == "muladd") && (${op_size} != 4)} {
 				continue
-			} else {
-				set factor 4
 			}
 
 			if {${op} == "add"} {
@@ -140,11 +143,11 @@ namespace eval SILVIA {
 					} else {
 						set extension "vhd"
 					}
-					set name "_simd_${instruction}_${factor}"
+					set name "_simd_${instruction}_${op_size}b"
 					foreach f [glob -nocomplain ${project_path}/${solution_name}/${dir}/${lang}/*${name}*.${extension}] {
 						set fbasename [file tail $f]
 						if {[regexp "^(.*${name}.*)\.${extension}\$" $fbasename -> module_name]} {
-							file copy -force ${ROOT}/template/${op}/${op}_${factor}.${extension} $f
+							file copy -force ${ROOT}/template/${op}/${op}_${op_size}b.${extension} $f
 							exec sh -c "sed -i 's/\{\{module_name\}\}/${module_name}/g' $f"
 							exec sh -c "sed -i 's/\{\{operator\}\}/${operator}/g' $f"
 							if {${lang} == "verilog"} {

@@ -367,9 +367,18 @@ bool SILVIA::moveUsesALAP(Instruction *inst, Instruction *barrier = nullptr,
   if (!insertionPoint)
     insertionPoint = instBB->getTerminator();
 
-  auto aliasingInst = getFirstAliasingInst(inst, inst, insertionPoint);
-  if (aliasingInst)
-    insertionPoint = aliasingInst;
+  // Move the aliasing instructions ALAP and recompute the insertion point.
+  if (auto aliasingInst = getFirstAliasingInst(inst, inst, insertionPoint)) {
+    moveUsesALAP(aliasingInst, barrier, true);
+
+    insertionPoint = getFirstValueUse(inst);
+    if (!insertionPoint)
+      insertionPoint = instBB->getTerminator();
+
+    aliasingInst = getFirstAliasingInst(inst, inst, insertionPoint);
+    if (aliasingInst)
+      insertionPoint = aliasingInst;
+  }
 
   if (barrier) {
     DenseMap<const Instruction *, int> instMap;

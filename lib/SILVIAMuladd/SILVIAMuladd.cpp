@@ -26,15 +26,9 @@ struct SILVIAMuladd : public SILVIA {
   bool runOnBasicBlock(BasicBlock &BB) override;
 
   bool doInitialization(Module &M) override {
+    SILVIA::doInitialization(M);
     DEBUG(packedTrees = 0);
     DEBUG(packedLeaves = 0);
-    return false;
-  }
-
-  bool doFinalization(Module &M) override {
-    DEBUG(if (packedTrees > 0) dbgs() << "SILVIAMuladd::doFinalization: packed "
-                                      << packedTrees << " trees ("
-                                      << packedLeaves << " leaves).\n");
     return false;
   }
 
@@ -45,6 +39,7 @@ struct SILVIAMuladd : public SILVIA {
   bool isTupleFull(SmallVector<SILVIA::Candidate, 4> &tuple) override;
   Value *packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
                    Instruction *insertBefore, LLVMContext &context) override;
+  void printReport() override;
 
   Function *MulAddSign;
   Function *MulAddUnsign;
@@ -588,6 +583,14 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   DEBUG(packedTrees += instTuple.size());
 
   return rootStruct;
+}
+
+void SILVIAMuladd::printReport() {
+  if (!SILVIAMuladdMulOnly) {
+    DEBUG(dbgs() << "SILVIAMuladd::printReport: packed " << packedTrees
+                 << " trees (" << packedLeaves << " leaves).\n");
+  }
+  SILVIA::printReport();
 }
 
 bool SILVIAMuladd::runOnBasicBlock(BasicBlock &BB) {

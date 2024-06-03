@@ -39,9 +39,7 @@ struct SILVIA : public BasicBlockPass {
   }
 
   bool doFinalization(Module &M) override {
-    DEBUG(if (packedTuples > 0) dbgs()
-          << "SILVIA::doFinalization: packed " << packedTuples << " tuples ("
-          << packedCandidates << " candidates).\n");
+    printReport();
     return false;
   }
 
@@ -72,6 +70,10 @@ struct SILVIA : public BasicBlockPass {
   virtual Value *packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
                            Instruction *insertBefore, LLVMContext &context) {
     return nullptr;
+  }
+  virtual void printReport() {
+    DEBUG(dbgs() << "SILVIA::printReport: packed " << packedTuples
+                 << " tuples (" << packedCandidates << " candidates).\n");
   }
 
   AliasAnalysis *AA;

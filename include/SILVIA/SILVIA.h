@@ -56,9 +56,6 @@ struct SILVIA : public BasicBlockPass {
   Instruction *getFirstAliasingInst(Instruction *instToMove,
                                     Instruction *firstInst,
                                     Instruction *lastInst);
-  Instruction *getLastAliasingInst(Instruction *instToMove,
-                                   Instruction *firstInst,
-                                   Instruction *lastInst);
   virtual bool
   isCandidateCompatibleWithTuple(SILVIA::Candidate &candidate,
                                  SmallVector<SILVIA::Candidate, 4> &tuple) {
@@ -202,64 +199,6 @@ Instruction *SILVIA::getFirstAliasingInst(Instruction *instToMove,
   return nullptr;
 }
 
-Instruction *SILVIA::getLastAliasingInst(Instruction *instToMove,
-                                         Instruction *firstInst,
-                                         Instruction *lastInst) {
-  auto loadToMove = dyn_cast<LoadInst>(instToMove);
-  auto storeToMove = dyn_cast<StoreInst>(instToMove);
-
-  if ((!loadToMove) && (!storeToMove))
-    return nullptr;
-
-  AliasAnalysis::Location locToMove =
-      (storeToMove ? AA->getLocation(storeToMove)
-                   : AA->getLocation(loadToMove));
-
-  bool toCheck = false;
-  auto BB = instToMove->getParent();
-  auto &instList = BB->getInstList();
-  for (auto BI = instList.rbegin(), BE = instList.rend(); BI != BE; ++BI) {
-    auto &I = *BI;
-    // Skip the instructions after the interval involved in the movement.
-    if ((!toCheck) && (&I != lastInst))
-      continue;
-    toCheck = true;
-
-    // Skip the instructions before the interval involved in the movement.
-    if (&I == firstInst)
-      break;
-
-    if (&I == instToMove)
-      continue;
-
-    if (auto call = dyn_cast<CallInst>(&I)) {
-      if (mayHaveSideEffects(call->getCalledFunction()))
-        return &I;
-    }
-
-    if (auto store = dyn_cast<StoreInst>(&I)) {
-      auto loc = AA->getLocation(store);
-
-      if (AA->alias(locToMove, loc) != AliasAnalysis::AliasResult::NoAlias)
-        return &I;
-    }
-
-    // If a load aliases with another load is not an issue. There is no need to
-    // check.
-    if (loadToMove)
-      continue;
-
-    if (auto load = dyn_cast<LoadInst>(&I)) {
-      auto loc = AA->getLocation(load);
-
-      if (AA->alias(locToMove, loc) != AliasAnalysis::AliasResult::NoAlias)
-        return &I;
-    }
-  }
-
-  return nullptr;
-}
-
 Value *SILVIA::getUnextendedValue(Value *V) {
   if (auto I = dyn_cast<Instruction>(V)) {
     if ((I->getOpcode() == Instruction::SExt) ||
@@ -282,63 +221,6 @@ int SILVIA::getExtOpcode(Instruction *I) {
   }
 
   return opcode;
-}
-
-bool SILVIA::moveDefsASAP(Instruction *inst, Instruction *barrier = nullptr,
-                          bool anticipateInst = false) {
-  if (inst == barrier)
-    return false;
-
-  // TODO: Anticipate calls if not crossing other calls or loads/stores.
-  auto opcode = inst->getOpcode();
-  if (opcode == Instruction::PHI)
-    return false;
-
-  if (auto call = dyn_cast<CallInst>(inst)) {
-    if (mayHaveSideEffects(call->getCalledFunction()))
-      return false;
-  }
-
-  if (barrier) {
-    DenseMap<const Instruction *, int> instMap;
-    getInstMap(inst->getParent(), instMap);
-    if (instMap[inst] <= instMap[barrier])
-      return false;
-  }
-
-  auto modified = false;
-  BasicBlock *instBB = inst->getParent();
-  for (unsigned i = 0; i < inst->getNumOperands(); ++i) {
-    Value *op = inst->getOperand(i);
-    auto opInst = dyn_cast<Instruction>(op);
-    if (!opInst)
-      continue;
-    if (opInst->getParent() == instBB)
-      modified = moveDefsASAP(opInst, barrier, true);
-  }
-
-  if (!anticipateInst)
-    return modified;
-
-  Instruction *insertionPoint = instBB->getFirstNonPHI();
-  auto lastDef = getLastOperandDef(inst);
-  if (lastDef && (lastDef->getOpcode() != Instruction::PHI))
-    insertionPoint = lastDef->getNextNode();
-
-  auto aliasingInst = getLastAliasingInst(inst, insertionPoint, inst);
-  if (aliasingInst)
-    insertionPoint = aliasingInst->getNextNode();
-
-  if (barrier) {
-    DenseMap<const Instruction *, int> instMap;
-    getInstMap(inst->getParent(), instMap);
-    if (instMap[insertionPoint] <= instMap[barrier])
-      insertionPoint = barrier->getNextNode();
-  }
-
-  inst->moveBefore(insertionPoint);
-
-  return true;
 }
 
 bool SILVIA::moveUsesALAP(Instruction *inst, Instruction *barrier = nullptr,
@@ -453,7 +335,6 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
     instTuple.push_back(candidateInsts.front());
     candidateInsts.pop_front();
 
-    modified |= moveDefsASAP(instTuple[0].outInst);
     modified |= moveUsesALAP(instTuple[0].outInst);
 
     Instruction *lastDef = nullptr;
@@ -469,7 +350,6 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
         continue;
       }
 
-      modified |= moveDefsASAP(candidateInstCurr.outInst, lastDef);
       modified |= moveUsesALAP(candidateInstCurr.outInst, firstUse);
 
       getDefsUsesInterval(instTuple, lastDef, firstUse);

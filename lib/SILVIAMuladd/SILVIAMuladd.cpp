@@ -486,8 +486,10 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   int balancedChainLength = std::ceil(leavesPacks.size() / ((float)numChains));
   auto MulAdd =
       ((notCommonOpSign == Instruction::SExt) ? MulAddSign : MulAddUnsign);
-  auto ExtractProds =
-      ((ext[1] == Instruction::SExt) ? ExtractProdsSign : ExtractProdsUnsign);
+  auto ExtractProds = (((ext[1] != Instruction::SExt) ||
+                        ((SILVIAMuladdOpSize == 4) && (MulAdd == MulAddSign)))
+                           ? ExtractProdsUnsign
+                           : ExtractProdsSign);
 
   const unsigned packedProdSize = ((SILVIAMuladdOpSize == 8) ? 36 : 32);
   Value *P = ConstantInt::get(IntegerType::get(context, packedProdSize), 0);
@@ -503,7 +505,8 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
     SmallVector<Value *, 6> args;
     for (const auto &leaf : leavesPacks[dspID].leaves)
       args.push_back(leaf);
-    args.push_back(P);
+    if (SILVIAMuladdOpSize == 8)
+      args.push_back(P);
     auto MulAddTy = cast<FunctionType>(
         cast<PointerType>(MulAdd->getType())->getElementType());
     for (unsigned i = 0; i < leavesPacks[dspID].leaves.size(); ++i) {
@@ -532,6 +535,9 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   }
 
   // 1. call extractProds from P
+  if ((SILVIAMuladdOpSize == 4) && (MulAdd == MulAddUnsign) &&
+      (ExtractProds == ExtractProdsUnsign))
+    P = builder.CreateExtractValue(P, 0);
   endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
 
   // 2. sum the extracted prods to the unpacked leafs

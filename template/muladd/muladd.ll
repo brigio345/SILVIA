@@ -4,7 +4,7 @@ target triple = "fpga64-xilinx-none"
 
 @empty_0 = internal unnamed_addr constant [1 x i8] zeroinitializer
 
-define internal fastcc i32 @_simd_muladd_signed_4b(i4 %w0, i4 %w1, i4 %w2, i4 %w3, i5 %a, i32 %pcin) nounwind readnone noinline {
+define internal fastcc i32 @_simd_muladd_signed_4b(i4 %w0, i4 %w1, i4 %w2, i4 %w3, i5 %a) nounwind readnone noinline {
 entry:
   call void (...)* @_ssdm_op_SpecPipeline(i32 1, i32 0, i32 0, i32 0, [1 x i8]* @empty_0)
   call void (...)* @_ssdm_op_SpecLatency(i64 5, i64 5, [1 x i8]* @empty_0)
@@ -26,7 +26,7 @@ entry:
   ret i32 %P, !bitwidth !1599
 }
 
-define internal fastcc { i32, i1, i1, i1 } @_simd_muladd_unsigned_4b(i4 %a0_val, i4 %a1_val, i4 %a2_val, i4 %a3_val, i5 %w_val, i32 %pcin) nounwind readnone {
+define internal fastcc { i32, i1, i1, i1 } @_simd_muladd_unsigned_4b(i4 %a0_val, i4 %a1_val, i4 %a2_val, i4 %a3_val, i5 %w_val) nounwind readnone {
 entry:
   %lshr_ln = call i3 @_ssdm_op_PartSelect.i3.i4.i32.i32(i4 %a0_val, i32 1, i32 3), !bitwidth !1492
   %zext_ln26 = zext i3 %lshr_ln to i4, !bitwidth !1493
@@ -76,8 +76,7 @@ define internal fastcc { i8, i8, i8, i8 } @_simd_muladd_signed_extract_4b({ i32,
   ret { i8, i8, i8, i8 } %P3, !bitwidth !1599
 }
 
-define internal fastcc { i8, i8, i8, i8 } @_simd_muladd_unsigned_extract_4b({ i32, i1, i1, i1 } %prods) nounwind readnone {
-  %M_val = extractvalue { i32, i1, i1, i1 } %prods, 0, !bitwidth !4
+define internal fastcc { i8, i8, i8, i8 } @_simd_muladd_unsigned_extract_4b(i32 %M_val) nounwind readnone {
   %p3 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 0, i32 7), !bitwidth !5
   %p2 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 8, i32 15), !bitwidth !5
   %p1 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 16, i32 23), !bitwidth !5

@@ -138,13 +138,19 @@ Instruction *SILVIA::getFirstAliasingInst(Instruction *instToMove,
                                           Instruction *lastInst) {
   auto loadToMove = dyn_cast<LoadInst>(instToMove);
   auto storeToMove = dyn_cast<StoreInst>(instToMove);
+  auto callToMove = dyn_cast<CallInst>(instToMove);
 
-  if ((!loadToMove) && (!storeToMove))
+  if (callToMove && (!mayHaveSideEffects(callToMove->getCalledFunction())))
     return nullptr;
 
-  AliasAnalysis::Location locToMove =
-      (storeToMove ? AA->getLocation(storeToMove)
-                   : AA->getLocation(loadToMove));
+  if ((!loadToMove) && (!storeToMove) && (!callToMove))
+    return nullptr;
+
+  AliasAnalysis::Location locToMove;
+  if (storeToMove)
+    locToMove = AA->getLocation(storeToMove);
+  else if (loadToMove)
+    locToMove = AA->getLocation(loadToMove);
 
   bool toCheck = false;
   for (auto &I : *(instToMove->getParent())) {
@@ -166,6 +172,9 @@ Instruction *SILVIA::getFirstAliasingInst(Instruction *instToMove,
     }
 
     if (auto store = dyn_cast<StoreInst>(&I)) {
+      if (callToMove)
+        return &I;
+
       auto loc = AA->getLocation(store);
 
       if (AA->alias(locToMove, loc) != AliasAnalysis::AliasResult::NoAlias)
@@ -178,6 +187,9 @@ Instruction *SILVIA::getFirstAliasingInst(Instruction *instToMove,
       continue;
 
     if (auto load = dyn_cast<LoadInst>(&I)) {
+      if (callToMove)
+        return &I;
+
       auto loc = AA->getLocation(load);
 
       if (AA->alias(locToMove, loc) != AliasAnalysis::AliasResult::NoAlias)
@@ -332,15 +344,9 @@ bool SILVIA::moveUsesALAP(Instruction *inst, Instruction *barrier = nullptr,
   if (inst == barrier)
     return false;
 
-  // TODO: Posticipate calls if not crossing other calls or loads/stores.
   auto opcode = inst->getOpcode();
   if (opcode == Instruction::PHI)
     return false;
-
-  if (auto call = dyn_cast<CallInst>(inst)) {
-    if (mayHaveSideEffects(call->getCalledFunction()))
-      return false;
-  }
 
   if (barrier) {
     DenseMap<const Instruction *, int> instMap;

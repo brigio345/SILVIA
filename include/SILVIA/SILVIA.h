@@ -308,7 +308,7 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   Function *F = BB.getParent();
   DEBUG(dbgs() << "SILVIA::runOnBasicBlock: called on " << F->getName() << " @ "
                << BB.getName() << ".\n");
-  if (F->getName().startswith("_ssdm_op") || F->getName().startswith("_simd"))
+  if (F->getName().startswith("_ssdm_op") || F->getName().startswith("_silvia"))
     return false;
 
   LLVMContext &context = F->getContext();

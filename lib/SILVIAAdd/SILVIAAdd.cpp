@@ -136,7 +136,7 @@ bool SILVIAAdd::runOnBasicBlock(BasicBlock &BB) {
 
   // Get the SIMD function
   Module *module = BB.getParent()->getParent();
-  SIMDFunc = module->getFunction("_simd_" + SIMDOp + "_" +
+  SIMDFunc = module->getFunction("_silvia_" + SIMDOp + "_" +
                                  std::to_string(SILVIAAddOpSize) + "b");
   assert(SIMDFunc && "SIMD function not found");
 

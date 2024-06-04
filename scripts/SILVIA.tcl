@@ -143,7 +143,7 @@ namespace eval SILVIA {
 					} else {
 						set extension "vhd"
 					}
-					set name "_simd_${instruction}_${op_size}b"
+					set name "_silvia_${instruction}_${op_size}b"
 					foreach f [glob -nocomplain ${project_path}/${solution_name}/${dir}/${lang}/*${name}*.${extension}] {
 						set fbasename [file tail $f]
 						if {[regexp "^(.*${name}.*)\.${extension}\$" $fbasename -> module_name]} {

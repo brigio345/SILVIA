@@ -56,10 +56,10 @@ entry:
 
 define internal fastcc { i8, i8, i8, i8 } @_silvia_muladd_signed_extract_4b({ i32, i1, i1, i1 } %prods) nounwind readnone {
   %M_val = extractvalue { i32, i1, i1, i1 } %prods, 0, !bitwidth !4
-  %p0 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 0, i32 7), !bitwidth !5
-  %p1 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 8, i32 15), !bitwidth !5
-  %p2 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 16, i32 23), !bitwidth !5
-  %p3 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 24, i32 31), !bitwidth !5
+  %p0 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 24, i32 31), !bitwidth !5
+  %p1 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 16, i32 23), !bitwidth !5
+  %p2 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 8, i32 15), !bitwidth !5
+  %p3 = call i8 @_ssdm_op_PartSelect.i8.i32.i32.i32(i32 %M_val, i32 0, i32 7), !bitwidth !5
   %p1_correction = extractvalue { i32, i1, i1, i1 } %prods, 1, !bitwidth !1652
   %zext_p1_correction = zext i1 %p1_correction to i8, !bitwidth !1566
   %p1_corrected = add i8 %p1, %zext_p1_correction, !bitwidth !2
@@ -69,10 +69,10 @@ define internal fastcc { i8, i8, i8, i8 } @_silvia_muladd_signed_extract_4b({ i3
   %p3_correction = extractvalue { i32, i1, i1, i1 } %prods, 3, !bitwidth !1652
   %zext_p3_correction = zext i1 %p3_correction to i8, !bitwidth !1566
   %p3_corrected = add i8 %p3, %zext_p3_correction, !bitwidth !2
-  %P0 = insertvalue { i8, i8, i8, i8 } undef, i8 %p3_corrected, 0, !bitwidth !1599
-  %P1 = insertvalue { i8, i8, i8, i8 } %P0, i8 %p2_corrected, 1, !bitwidth !1599
-  %P2 = insertvalue { i8, i8, i8, i8 } %P1, i8 %p1_corrected, 2, !bitwidth !1599
-  %P3 = insertvalue { i8, i8, i8, i8 } %P2, i8 %p0, 3, !bitwidth !1599
+  %P0 = insertvalue { i8, i8, i8, i8 } undef, i8 %p0, 0, !bitwidth !1599
+  %P1 = insertvalue { i8, i8, i8, i8 } %P0, i8 %p1_corrected, 1, !bitwidth !1599
+  %P2 = insertvalue { i8, i8, i8, i8 } %P1, i8 %p2_corrected, 2, !bitwidth !1599
+  %P3 = insertvalue { i8, i8, i8, i8 } %P2, i8 %p3_corrected, 3, !bitwidth !1599
   ret { i8, i8, i8, i8 } %P3, !bitwidth !1599
 }
 

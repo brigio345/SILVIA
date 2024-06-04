@@ -49,8 +49,6 @@ struct SILVIA : public BasicBlockPass {
   virtual std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) {
     return std::list<SILVIA::Candidate>();
   }
-  bool moveDefsASAP(Instruction *inst, Instruction *barrier,
-                    bool anticipateInst);
   bool moveUsesALAP(Instruction *inst, Instruction *barrier,
                     bool posticipateInst);
   Instruction *getFirstAliasingInst(Instruction *instToMove,

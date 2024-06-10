@@ -321,6 +321,18 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
                                               << candidateInsts.size()
                                               << " candidates.\n");
 
+  // Sorting the input values of each candidate empirically proved to result in
+  // a larger number of packs.
+  DenseMap<const Instruction *, int> instMap;
+  getInstMap(&BB, instMap);
+  for (auto &candidate : candidateInsts) {
+    std::sort(candidate.inVals.begin(), candidate.inVals.end(),
+              [&](Value *a, Value *b) {
+                return instMap[cast<Instruction>(a)] >
+                       instMap[cast<Instruction>(b)];
+              });
+  }
+
   if (candidateInsts.size() < 2)
     return false;
 

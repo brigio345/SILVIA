@@ -532,12 +532,12 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
     }
     P = builder.CreateCall(MulAdd, args, leavesPacks[dspID].name);
     mulAddCalls.push_back(P);
+    if ((SILVIAMuladdOpSize == 4) && (MulAdd == MulAddUnsign) &&
+        (ExtractProds == ExtractProdsUnsign))
+      P = builder.CreateExtractValue(P, 0);
   }
 
   // 1. call extractProds from P
-  if ((SILVIAMuladdOpSize == 4) && (MulAdd == MulAddUnsign) &&
-      (ExtractProds == ExtractProdsUnsign))
-    P = builder.CreateExtractValue(P, 0);
   endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
 
   // 2. sum the extracted prods to the unpacked leafs

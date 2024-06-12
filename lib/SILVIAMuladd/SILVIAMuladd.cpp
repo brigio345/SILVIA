@@ -633,7 +633,17 @@ bool SILVIAMuladd::runOnBasicBlock(BasicBlock &BB) {
   assert((ExtractProdsSign && ExtractProdsUnsign) &&
          "SIMD extract function not found");
 
+  const auto packedLeavesBefore = packedLeaves;
+  const auto packedTreesBefore = packedTrees;
+
   auto modified = SILVIA::runOnBasicBlock(BB);
+
+  DEBUG(if (packedTrees > packedTreesBefore) {
+    dbgs() << "SILVIAMuladd::runOnBasicBlock(" << BB.getName() << " @ "
+           << BB.getParent()->getName() << "): packed "
+           << (packedTrees - packedTreesBefore) << " trees ("
+           << (packedLeaves - packedLeavesBefore) << " leaves).\n";
+  });
 
   if ((SILVIAMuladdInline || (SILVIAMuladdOpSize == 4)) && modified) {
     // InlineFunction may name some instructions with strings containing ".",

@@ -402,6 +402,8 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
 
   bool modified = false;
 
+  const auto numPackedTuplesBefore = numPackedTuples;
+  const auto numPackedCandidatesBefore = numPackedCandidates;
 
   std::unordered_set<SILVIA::Candidate, SILVIA::Candidate::Hash>
       packedCandidates;
@@ -501,6 +503,14 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
 
     modified = true;
   }
+
+  DEBUG(if (numPackedTuples > numPackedTuplesBefore) {
+    dbgs() << "SILVIA::runOnBasicBlock(" << BB.getName() << " @ "
+           << BB.getParent()->getName() << "): packed "
+           << (numPackedTuples - numPackedTuplesBefore) << " tuples ("
+           << (numPackedCandidates - numPackedCandidatesBefore)
+           << " candidates).\n";
+  });
 
   return modified;
 }

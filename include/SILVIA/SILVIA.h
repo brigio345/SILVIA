@@ -14,6 +14,7 @@
 #include <cassert>
 #include <cmath>
 #include <list>
+#include <unordered_set>
 
 using namespace llvm;
 
@@ -24,6 +25,17 @@ struct SILVIA : public BasicBlockPass {
   struct Candidate {
     SmallVector<Value *, 2> inVals;
     Instruction *outInst;
+
+    bool operator==(const Candidate &other) const {
+      return ((inVals == other.inVals) && (outInst == other.outInst));
+    }
+
+    struct Hash {
+      size_t operator()(const Candidate &candidate) const {
+        // TODO: Define a proper hash function.
+        return reinterpret_cast<size_t>(candidate.outInst);
+      }
+    };
   };
 
   virtual bool runOnBasicBlock(BasicBlock &BB);
@@ -33,8 +45,8 @@ struct SILVIA : public BasicBlockPass {
   }
 
   bool doInitialization(Module &M) override {
-    DEBUG(packedTuples = 0);
-    DEBUG(packedCandidates = 0);
+    DEBUG(numPackedTuples = 0);
+    DEBUG(numPackedCandidates = 0);
     return false;
   }
 
@@ -67,13 +79,20 @@ struct SILVIA : public BasicBlockPass {
     return nullptr;
   }
   virtual void printReport() {
-    DEBUG(dbgs() << "SILVIA::printReport: packed " << packedTuples
-                 << " tuples (" << packedCandidates << " candidates).\n");
+    DEBUG(dbgs() << "SILVIA::printReport: packed " << numPackedTuples
+                 << " tuples (" << numPackedCandidates << " candidates).\n");
   }
 
+  std::list<SmallVector<SILVIA::Candidate, 4>>
+  getAllTuples(std::list<SILVIA::Candidate>::iterator &candidatesIt,
+               std::list<SILVIA::Candidate>::iterator &candidatesEnd,
+               SmallVector<SILVIA::Candidate, 4> &tuple);
+  std::list<SmallVector<SILVIA::Candidate, 4>>
+  getAllTuples(std::list<SILVIA::Candidate> &candidates);
+
   AliasAnalysis *AA;
-  unsigned long packedTuples;
-  unsigned long packedCandidates;
+  unsigned long numPackedTuples;
+  unsigned long numPackedCandidates;
 };
 
 void getInstMap(const BasicBlock *const BB,
@@ -305,6 +324,39 @@ void getDefsUsesInterval(SmallVector<SILVIA::Candidate, 4> &tuple,
   }
 }
 
+std::list<SmallVector<SILVIA::Candidate, 4>>
+SILVIA::getAllTuples(std::list<SILVIA::Candidate>::iterator &candidatesIt,
+                     std::list<SILVIA::Candidate>::iterator &candidatesEnd,
+                     SmallVector<SILVIA::Candidate, 4> &tuple) {
+  std::list<SmallVector<SILVIA::Candidate, 4>> tuples;
+  if (isTupleFull(tuple)) {
+    tuples.push_back(tuple);
+    return tuples;
+  }
+  for (; candidatesIt != candidatesEnd; ++candidatesIt) {
+    SILVIA::Candidate candidate = *candidatesIt;
+    if (isCandidateCompatibleWithTuple(candidate, tuple)) {
+      auto candidatesNextIt = std::next(candidatesIt);
+      tuple.push_back(candidate);
+      tuples.splice(tuples.end(),
+                    getAllTuples(candidatesNextIt, candidatesEnd, tuple));
+      tuple.pop_back();
+    }
+  }
+  if ((tuples.size() == 0) && (tuple.size() > 1))
+    tuples.push_back(tuple);
+  return tuples;
+}
+
+// Return all the tuples of candidates that can be packed together.
+std::list<SmallVector<SILVIA::Candidate, 4>>
+SILVIA::getAllTuples(std::list<SILVIA::Candidate> &candidates) {
+  SmallVector<SILVIA::Candidate, 4> tuple;
+  auto candidatesBegin = candidates.begin();
+  auto candidatesEnd = candidates.end();
+  return getAllTuples(candidatesBegin, candidatesEnd, tuple);
+}
+
 bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   Function *F = BB.getParent();
   DEBUG(dbgs() << "SILVIA::runOnBasicBlock: called on " << F->getName() << " @ "
@@ -336,129 +388,114 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   if (candidateInsts.size() < 2)
     return false;
 
+  auto tuples = getAllTuples(candidateInsts);
+
+  // Prioritize the tuples composed of larger amounts of candidates.
+  tuples.sort([&](SmallVector<SILVIA::Candidate, 4> &a,
+                  SmallVector<SILVIA::Candidate, 4> &b) {
+    if (a.size() > b.size())
+      return true;
+    if (a.size() < b.size())
+      return false;
+    return (instMap[a[0].outInst] > instMap[b[0].outInst]);
+  });
+
   bool modified = false;
 
-  // Build tuples of SIMDFactor instructions that can be mapped to the
-  // same SIMD DSP.
-  while (candidateInsts.size() > 1) {
-    SmallVector<SILVIA::Candidate, 4> instTuple;
 
-    instTuple.push_back(candidateInsts.front());
-    candidateInsts.pop_front();
+  std::unordered_set<SILVIA::Candidate, SILVIA::Candidate::Hash>
+      packedCandidates;
 
-    modified |= moveUsesALAP(instTuple[0].outInst);
-
-    Instruction *lastDef = nullptr;
-    Instruction *firstUse = nullptr;
-    getDefsUsesInterval(instTuple, lastDef, firstUse);
-
-    for (auto CI = candidateInsts.begin(), CE = candidateInsts.end();
-         CI != CE;) {
-      SILVIA::Candidate candidateInstCurr = *CI;
-
-      if (!isCandidateCompatibleWithTuple(candidateInstCurr, instTuple)) {
-        CI++;
-        continue;
+  // Pack the tuples not containing already packed candidates.
+  for (auto &tuple : tuples) {
+    auto canPack = true;
+    // TODO: Accept tuples containing non-packed candidates (?)
+    for (const auto &candidate : tuple) {
+      if (packedCandidates.count(candidate)) {
+        canPack = false;
+        break;
       }
-
-      modified |= moveUsesALAP(candidateInstCurr.outInst, firstUse);
-
-      getDefsUsesInterval(instTuple, lastDef, firstUse);
-      Instruction *lastDefCurr = getLastOperandDef(candidateInstCurr.outInst);
-      Instruction *firstUseCurr = getFirstValueUse(candidateInstCurr.outInst);
-
-      DenseMap<const Instruction *, int> instMap;
-      getInstMap(&BB, instMap);
-
-      // Check if the current candidate uses the tuple or if the tuple uses the
-      // current candidate.
-      auto compatible = true;
-      for (const auto &selected : instTuple) {
-        for (const auto &inVal : candidateInstCurr.inVals) {
+    }
+    if (!canPack)
+      continue;
+    for (auto TI = tuple.begin(), TE = tuple.end(); TI != TE; ++TI) {
+      SILVIA::Candidate candidate = *TI;
+      // Check if a candidate uses other candidates within the tuple.
+      for (auto TJ = std::next(TI); TJ != TE; ++TJ) {
+        SILVIA::Candidate selected = *TJ;
+        for (const auto &inVal : candidate.inVals) {
           if (inVal == selected.outInst) {
-            compatible = false;
+            canPack = false;
             break;
           }
         }
-        if (!compatible)
+        if (!canPack)
           break;
 
         for (const auto &inVal : selected.inVals) {
-          if (inVal == candidateInstCurr.outInst) {
-            compatible = false;
+          if (inVal == candidate.outInst) {
+            canPack = false;
             break;
           }
         }
-        if (!compatible)
+        if (!canPack)
           break;
       }
-      if (!compatible) {
-        CI++;
-        continue;
-      }
-
-      if ((!lastDefCurr) ||
-          (lastDef && (instMap[lastDefCurr] < instMap[lastDef])))
-        lastDefCurr = lastDef;
-
-      if ((!firstUseCurr) ||
-          (firstUse && (instMap[firstUse] < instMap[firstUseCurr])))
-        firstUseCurr = firstUse;
-
-      // If firstUseCurr is before lastDefCurr this pair of instructions is not
-      // compatible with current tuple.
-      if (firstUseCurr && lastDefCurr &&
-          (instMap[firstUseCurr] <= instMap[lastDefCurr])) {
-        CI++;
-        continue;
-      }
-
-      instTuple.push_back(candidateInstCurr);
-
-      // Update with tuple worst case
-      firstUse = firstUseCurr;
-      lastDef = lastDefCurr;
-
-      // The current candidate was selected: it is not a candidate anymore.
-      candidateInsts.erase(CI++);
-
-      if (isTupleFull(instTuple))
+      if (!canPack) {
         break;
+      }
     }
 
-    if (instTuple.size() < 2)
+    if (!canPack)
       continue;
 
-    DEBUG(dbgs() << "SILVIA::runOnBasicBlock: found a tuple of "
-                 << instTuple.size() << " elements.\n");
+    for (const auto &candidate : tuple)
+      modified |= moveUsesALAP(candidate.outInst, nullptr);
+
+    Instruction *lastDef = nullptr;
+    Instruction *firstUse = nullptr;
+    getDefsUsesInterval(tuple, lastDef, firstUse);
+
+    DenseMap<const Instruction *, int> instMap;
+    getInstMap(&BB, instMap);
+
+    // If firstUse is before lastDef this tuple is not valid.
+    if (firstUse && lastDef && (instMap[firstUse] <= instMap[lastDef]))
+      continue;
+
+    DEBUG(dbgs() << "SILVIA::runOnBasicBlock: found a tuple of " << tuple.size()
+                 << " elements.\n");
     auto insertBefore = (firstUse ? firstUse : BB.getTerminator());
-    auto pack = packTuple(instTuple, insertBefore, context);
+    auto pack = packTuple(tuple, insertBefore, context);
 
     if (!pack)
       continue;
 
-    DEBUG(packedTuples++);
-    DEBUG(packedCandidates += instTuple.size());
+    for (const auto &candidate : tuple)
+      packedCandidates.insert(candidate);
+
+    DEBUG(numPackedTuples++);
+    DEBUG(numPackedCandidates += tuple.size());
     DEBUG(dbgs() << "SILVIA::runOnBasicBlock: packed a tuple of "
-                 << instTuple.size() << " elements.\n");
+                 << tuple.size() << " elements.\n");
 
     IRBuilder<> builder(insertBefore);
-    for (unsigned i = 0; i < instTuple.size(); ++i) {
-      std::string origName = instTuple[i].outInst->getName();
+    for (unsigned i = 0; i < tuple.size(); ++i) {
+      std::string origName = tuple[i].outInst->getName();
       Instruction *packedInst =
           cast<Instruction>(builder.CreateExtractValue(pack, i));
       for (auto &candidate : candidateInsts) {
         for (auto &inVal : candidate.inVals) {
-          if (inVal == instTuple[i].outInst)
+          if (inVal == tuple[i].outInst)
             inVal = packedInst;
         }
       }
-      if (insertBefore == instTuple[i].outInst) {
+      if (insertBefore == tuple[i].outInst) {
         insertBefore = packedInst;
         builder.SetInsertPoint(insertBefore);
       }
-      instTuple[i].outInst->replaceAllUsesWith(packedInst);
-      instTuple[i].outInst->eraseFromParent();
+      tuple[i].outInst->replaceAllUsesWith(packedInst);
+      tuple[i].outInst->eraseFromParent();
       packedInst->setName(origName);
     }
 

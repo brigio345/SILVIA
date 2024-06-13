@@ -61,7 +61,7 @@ struct SILVIA : public BasicBlockPass {
   virtual std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) {
     return std::list<SILVIA::Candidate>();
   }
-  bool moveUsesALAP(Instruction *inst, bool posticipateInst);
+  bool moveUsesALAP(Instruction *inst, bool postponeInst);
   Instruction *getFirstAliasingInst(Instruction *instToMove,
                                     Instruction *firstInst,
                                     Instruction *lastInst);
@@ -240,7 +240,7 @@ int SILVIA::getExtOpcode(Instruction *I) {
   return opcode;
 }
 
-bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
+bool SILVIA::moveUsesALAP(Instruction *inst, bool postponeInst = false) {
   auto opcode = inst->getOpcode();
   if (opcode == Instruction::PHI)
     return false;
@@ -256,7 +256,7 @@ bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
       modified = moveUsesALAP(userInst, true);
   }
 
-  if (!posticipateInst)
+  if (!postponeInst)
     return modified;
 
   Instruction *insertionPoint = getFirstValueUse(inst);

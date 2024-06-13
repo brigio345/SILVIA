@@ -540,7 +540,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
   // 1. call extractProds from P
   endsOfChain.push_back(builder.CreateCall(ExtractProds, P));
 
-  // 2. sum the extracted prods to the unpacked leafs
+  // 2. sum the extracted prods to the unpacked leaves
   for (unsigned i = 0; i < toAdd.size(); ++i) {
     for (const auto &endOfChain : endsOfChain)
       toAdd[i].push_back(builder.CreateExtractValue(endOfChain, i));

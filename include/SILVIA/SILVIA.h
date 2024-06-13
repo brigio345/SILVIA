@@ -61,8 +61,7 @@ struct SILVIA : public BasicBlockPass {
   virtual std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) {
     return std::list<SILVIA::Candidate>();
   }
-  bool moveUsesALAP(Instruction *inst, Instruction *barrier,
-                    bool posticipateInst);
+  bool moveUsesALAP(Instruction *inst, bool posticipateInst);
   Instruction *getFirstAliasingInst(Instruction *instToMove,
                                     Instruction *firstInst,
                                     Instruction *lastInst);
@@ -241,21 +240,10 @@ int SILVIA::getExtOpcode(Instruction *I) {
   return opcode;
 }
 
-bool SILVIA::moveUsesALAP(Instruction *inst, Instruction *barrier = nullptr,
-                          bool posticipateInst = false) {
-  if (inst == barrier)
-    return false;
-
+bool SILVIA::moveUsesALAP(Instruction *inst, bool posticipateInst = false) {
   auto opcode = inst->getOpcode();
   if (opcode == Instruction::PHI)
     return false;
-
-  if (barrier) {
-    DenseMap<const Instruction *, int> instMap;
-    getInstMap(inst->getParent(), instMap);
-    if (instMap[inst] >= instMap[barrier])
-      return false;
-  }
 
   auto modified = false;
   BasicBlock *instBB = inst->getParent();
@@ -265,7 +253,7 @@ bool SILVIA::moveUsesALAP(Instruction *inst, Instruction *barrier = nullptr,
     if (!userInst)
       continue;
     if (userInst->getParent() == instBB)
-      modified = moveUsesALAP(userInst, barrier, true);
+      modified = moveUsesALAP(userInst, true);
   }
 
   if (!posticipateInst)
@@ -277,7 +265,7 @@ bool SILVIA::moveUsesALAP(Instruction *inst, Instruction *barrier = nullptr,
 
   // Move the aliasing instructions ALAP and recompute the insertion point.
   if (auto aliasingInst = getFirstAliasingInst(inst, inst, insertionPoint)) {
-    moveUsesALAP(aliasingInst, barrier, true);
+    moveUsesALAP(aliasingInst, true);
 
     insertionPoint = getFirstValueUse(inst);
     if (!insertionPoint)
@@ -286,13 +274,6 @@ bool SILVIA::moveUsesALAP(Instruction *inst, Instruction *barrier = nullptr,
     aliasingInst = getFirstAliasingInst(inst, inst, insertionPoint);
     if (aliasingInst)
       insertionPoint = aliasingInst;
-  }
-
-  if (barrier) {
-    DenseMap<const Instruction *, int> instMap;
-    getInstMap(inst->getParent(), instMap);
-    if (instMap[insertionPoint] > instMap[barrier])
-      insertionPoint = barrier;
   }
 
   inst->moveBefore(insertionPoint);
@@ -452,7 +433,7 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
       continue;
 
     for (const auto &candidate : tuple)
-      modified |= moveUsesALAP(candidate.outInst, nullptr);
+      modified |= moveUsesALAP(candidate.outInst);
 
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;

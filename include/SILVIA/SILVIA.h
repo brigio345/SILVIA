@@ -1,4 +1,5 @@
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/BasicBlock.h"
@@ -61,7 +62,9 @@ struct SILVIA : public BasicBlockPass {
   virtual std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) {
     return std::list<SILVIA::Candidate>();
   }
-  bool moveUsesALAP(Instruction *inst, bool postponeInst);
+  bool moveUsesALAP(Instruction *inst);
+  bool moveUsesALAP(Instruction *inst, bool postponeInst,
+                    DenseSet<Instruction *> &postponed);
   Instruction *getFirstAliasingInst(Instruction *instToMove,
                                     Instruction *firstInst,
                                     Instruction *lastInst);
@@ -240,7 +243,16 @@ int SILVIA::getExtOpcode(Instruction *I) {
   return opcode;
 }
 
-bool SILVIA::moveUsesALAP(Instruction *inst, bool postponeInst = false) {
+bool SILVIA::moveUsesALAP(Instruction *inst) {
+  DenseSet<Instruction *> postponed;
+  return moveUsesALAP(inst, false, postponed);
+}
+
+bool SILVIA::moveUsesALAP(Instruction *inst, bool postponeInst,
+                          DenseSet<Instruction *> &postponed) {
+  if (postponed.count(inst))
+    return false;
+
   auto opcode = inst->getOpcode();
   if (opcode == Instruction::PHI)
     return false;
@@ -253,7 +265,7 @@ bool SILVIA::moveUsesALAP(Instruction *inst, bool postponeInst = false) {
     if (!userInst)
       continue;
     if (userInst->getParent() == instBB)
-      modified = moveUsesALAP(userInst, true);
+      modified = moveUsesALAP(userInst, true, postponed);
   }
 
   if (!postponeInst)
@@ -265,7 +277,7 @@ bool SILVIA::moveUsesALAP(Instruction *inst, bool postponeInst = false) {
 
   // Move the aliasing instructions ALAP and recompute the insertion point.
   if (auto aliasingInst = getFirstAliasingInst(inst, inst, insertionPoint)) {
-    moveUsesALAP(aliasingInst, true);
+    moveUsesALAP(aliasingInst, true, postponed);
 
     insertionPoint = getFirstValueUse(inst);
     if (!insertionPoint)
@@ -277,6 +289,8 @@ bool SILVIA::moveUsesALAP(Instruction *inst, bool postponeInst = false) {
   }
 
   inst->moveBefore(insertionPoint);
+
+  postponed.insert(inst);
 
   return true;
 }

@@ -15,7 +15,7 @@ using namespace llvm;
 
 struct SILVIAAdd : public SILVIA {
   static char ID;
-  SILVIAAdd() : SILVIA(ID) {}
+  SILVIAAdd() : SILVIA(ID, true) {}
 
   bool runOnBasicBlock(BasicBlock &BB) override;
 

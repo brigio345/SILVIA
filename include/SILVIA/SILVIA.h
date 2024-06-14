@@ -21,7 +21,8 @@ using namespace llvm;
 
 struct SILVIA : public BasicBlockPass {
   static char ID;
-  SILVIA(char ID) : BasicBlockPass(ID) {}
+  SILVIA(char ID, bool SINGLE_OCCURRENCE)
+      : BasicBlockPass(ID), SINGLE_OCCURRENCE(SINGLE_OCCURRENCE) {}
 
   struct Candidate {
     SmallVector<Value *, 2> inVals;
@@ -85,16 +86,20 @@ struct SILVIA : public BasicBlockPass {
                  << " tuples (" << numPackedCandidates << " candidates).\n");
   }
 
-  bool getAllTuples(std::list<SILVIA::Candidate>::iterator &candidatesIt,
-                    std::list<SILVIA::Candidate>::iterator &candidatesEnd,
-                    SmallVector<SILVIA::Candidate, 4> &tuple,
-                    std::list<SmallVector<SILVIA::Candidate, 4>> &tuples);
+  bool
+  getAllTuples(std::list<SILVIA::Candidate>::iterator &candidatesIt,
+               std::list<SILVIA::Candidate>::iterator &candidatesEnd,
+               SmallVector<SILVIA::Candidate, 4> &tuple,
+               std::unordered_set<SILVIA::Candidate, SILVIA::Candidate::Hash>
+                   &tupledCandidates,
+               std::list<SmallVector<SILVIA::Candidate, 4>> &tuples);
   std::list<SmallVector<SILVIA::Candidate, 4>>
   getAllTuples(std::list<SILVIA::Candidate> &candidates);
 
   AliasAnalysis *AA;
   unsigned long numPackedTuples;
   unsigned long numPackedCandidates;
+  const bool SINGLE_OCCURRENCE;
 };
 
 void getInstMap(const BasicBlock *const BB,
@@ -323,15 +328,24 @@ bool SILVIA::getAllTuples(
     std::list<SILVIA::Candidate>::iterator &candidatesIt,
     std::list<SILVIA::Candidate>::iterator &candidatesEnd,
     SmallVector<SILVIA::Candidate, 4> &tuple,
+    std::unordered_set<SILVIA::Candidate, SILVIA::Candidate::Hash>
+        &tupledCandidates,
     std::list<SmallVector<SILVIA::Candidate, 4>> &tuples) {
   if (isTupleFull(tuple)) {
     tuples.push_back(tuple);
+    if (SINGLE_OCCURRENCE) {
+      for (const auto &candidate : tuple)
+        tupledCandidates.insert(candidate);
+    }
     return true;
   }
 
   auto tupled = false;
   for (; candidatesIt != candidatesEnd; ++candidatesIt) {
     SILVIA::Candidate candidate = *candidatesIt;
+
+    if (SINGLE_OCCURRENCE && tupledCandidates.count(candidate))
+      continue;
 
     auto canPack = true;
     // Skip candidates using or used by other candidates within the tuple.
@@ -362,12 +376,27 @@ bool SILVIA::getAllTuples(
 
     auto candidatesNextIt = std::next(candidatesIt);
     tuple.push_back(candidate);
-    tupled |= getAllTuples(candidatesNextIt, candidatesEnd, tuple, tuples);
+    const auto tupledRecur = getAllTuples(candidatesNextIt, candidatesEnd,
+                                          tuple, tupledCandidates, tuples);
+    tupled |= tupledRecur;
     tuple.pop_back();
+
+    if (SINGLE_OCCURRENCE && tupledRecur) {
+      if (tuple.size() > 0)
+        return true;
+      continue;
+    }
   }
 
-  if ((!tupled) && (tuple.size() > 1))
+  if ((!tupled) && (tuple.size() > 1)) {
     tuples.push_back(tuple);
+    if (SINGLE_OCCURRENCE) {
+      for (const auto &candidate : tuple)
+        tupledCandidates.insert(candidate);
+    }
+
+    return true;
+  }
 
   return tupled;
 }
@@ -378,8 +407,10 @@ SILVIA::getAllTuples(std::list<SILVIA::Candidate> &candidates) {
   auto candidatesBegin = candidates.begin();
   auto candidatesEnd = candidates.end();
   SmallVector<SILVIA::Candidate, 4> tuple;
+  std::unordered_set<SILVIA::Candidate, SILVIA::Candidate::Hash>
+      tupledCandidates;
   std::list<SmallVector<SILVIA::Candidate, 4>> tuples;
-  getAllTuples(candidatesBegin, candidatesEnd, tuple, tuples);
+  getAllTuples(candidatesBegin, candidatesEnd, tuple, tupledCandidates, tuples);
 
   return tuples;
 }

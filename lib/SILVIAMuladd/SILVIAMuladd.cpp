@@ -16,7 +16,7 @@ using namespace llvm;
 
 struct SILVIAMuladd : public SILVIA {
   static char ID;
-  SILVIAMuladd() : SILVIA(ID) {}
+  SILVIAMuladd() : SILVIA(ID, false) {}
 
   struct AddTree {
     SILVIA::Candidate candidate;

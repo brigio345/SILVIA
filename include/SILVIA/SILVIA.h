@@ -85,10 +85,10 @@ struct SILVIA : public BasicBlockPass {
                  << " tuples (" << numPackedCandidates << " candidates).\n");
   }
 
-  std::list<SmallVector<SILVIA::Candidate, 4>>
-  getAllTuples(std::list<SILVIA::Candidate>::iterator &candidatesIt,
-               std::list<SILVIA::Candidate>::iterator &candidatesEnd,
-               SmallVector<SILVIA::Candidate, 4> &tuple);
+  bool getAllTuples(std::list<SILVIA::Candidate>::iterator &candidatesIt,
+                    std::list<SILVIA::Candidate>::iterator &candidatesEnd,
+                    SmallVector<SILVIA::Candidate, 4> &tuple,
+                    std::list<SmallVector<SILVIA::Candidate, 4>> &tuples);
   std::list<SmallVector<SILVIA::Candidate, 4>>
   getAllTuples(std::list<SILVIA::Candidate> &candidates);
 
@@ -319,18 +319,20 @@ void getDefsUsesInterval(SmallVector<SILVIA::Candidate, 4> &tuple,
   }
 }
 
-std::list<SmallVector<SILVIA::Candidate, 4>>
-SILVIA::getAllTuples(std::list<SILVIA::Candidate>::iterator &candidatesIt,
-                     std::list<SILVIA::Candidate>::iterator &candidatesEnd,
-                     SmallVector<SILVIA::Candidate, 4> &tuple) {
-  std::list<SmallVector<SILVIA::Candidate, 4>> tuples;
+bool SILVIA::getAllTuples(
+    std::list<SILVIA::Candidate>::iterator &candidatesIt,
+    std::list<SILVIA::Candidate>::iterator &candidatesEnd,
+    SmallVector<SILVIA::Candidate, 4> &tuple,
+    std::list<SmallVector<SILVIA::Candidate, 4>> &tuples) {
   if (isTupleFull(tuple)) {
     tuples.push_back(tuple);
-    return tuples;
+    return true;
   }
+
+  auto tupled = false;
   for (; candidatesIt != candidatesEnd; ++candidatesIt) {
     SILVIA::Candidate candidate = *candidatesIt;
- 
+
     auto canPack = true;
     // Skip candidates using or used by other candidates within the tuple.
     for (const auto &selected : tuple) {
@@ -360,22 +362,26 @@ SILVIA::getAllTuples(std::list<SILVIA::Candidate>::iterator &candidatesIt,
 
     auto candidatesNextIt = std::next(candidatesIt);
     tuple.push_back(candidate);
-    tuples.splice(tuples.end(),
-                  getAllTuples(candidatesNextIt, candidatesEnd, tuple));
+    tupled |= getAllTuples(candidatesNextIt, candidatesEnd, tuple, tuples);
     tuple.pop_back();
   }
-  if ((tuples.size() == 0) && (tuple.size() > 1))
+
+  if ((!tupled) && (tuple.size() > 1))
     tuples.push_back(tuple);
-  return tuples;
+
+  return tupled;
 }
 
 // Return all the tuples of candidates that can be packed together.
 std::list<SmallVector<SILVIA::Candidate, 4>>
 SILVIA::getAllTuples(std::list<SILVIA::Candidate> &candidates) {
-  SmallVector<SILVIA::Candidate, 4> tuple;
   auto candidatesBegin = candidates.begin();
   auto candidatesEnd = candidates.end();
-  return getAllTuples(candidatesBegin, candidatesEnd, tuple);
+  SmallVector<SILVIA::Candidate, 4> tuple;
+  std::list<SmallVector<SILVIA::Candidate, 4>> tuples;
+  getAllTuples(candidatesBegin, candidatesEnd, tuple, tuples);
+
+  return tuples;
 }
 
 bool SILVIA::runOnBasicBlock(BasicBlock &BB) {

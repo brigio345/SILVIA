@@ -401,7 +401,7 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   for (auto &candidate : candidateInsts) {
     std::sort(candidate.inVals.begin(), candidate.inVals.end(),
               [&](Value *a, Value *b) {
-                return instMap[cast<Instruction>(a)] >
+                return instMap[cast<Instruction>(a)] <
                        instMap[cast<Instruction>(b)];
               });
   }
@@ -418,7 +418,7 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
       return true;
     if (a.size() < b.size())
       return false;
-    return (instMap[a[0].outInst] > instMap[b[0].outInst]);
+    return (instMap[a[0].outInst] < instMap[b[0].outInst]);
   });
 
   bool modified = false;

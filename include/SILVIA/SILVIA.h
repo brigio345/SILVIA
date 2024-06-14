@@ -446,9 +446,6 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
     if (!canPack)
       continue;
 
-    for (const auto &candidate : tuple)
-      modified |= moveUsesALAP(candidate.outInst);
-
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
     getDefsUsesInterval(tuple, lastDef, firstUse);
@@ -456,6 +453,13 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
     DenseMap<const Instruction *, int> instMap;
     getInstMap(&BB, instMap);
 
+    if (firstUse && lastDef && (instMap[firstUse] <= instMap[lastDef])) {
+      for (const auto &candidate : tuple)
+        modified |= moveUsesALAP(candidate.outInst);
+    }
+
+    getDefsUsesInterval(tuple, lastDef, firstUse);
+    getInstMap(&BB, instMap);
     // If firstUse is before lastDef this tuple is not valid.
     if (firstUse && lastDef && (instMap[firstUse] <= instMap[lastDef]))
       continue;

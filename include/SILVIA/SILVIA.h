@@ -330,13 +330,39 @@ SILVIA::getAllTuples(std::list<SILVIA::Candidate>::iterator &candidatesIt,
   }
   for (; candidatesIt != candidatesEnd; ++candidatesIt) {
     SILVIA::Candidate candidate = *candidatesIt;
-    if (isCandidateCompatibleWithTuple(candidate, tuple)) {
-      auto candidatesNextIt = std::next(candidatesIt);
-      tuple.push_back(candidate);
-      tuples.splice(tuples.end(),
-                    getAllTuples(candidatesNextIt, candidatesEnd, tuple));
-      tuple.pop_back();
+ 
+    auto canPack = true;
+    // Skip candidates using or used by other candidates within the tuple.
+    for (const auto &selected : tuple) {
+      for (const auto &inVal : candidate.inVals) {
+        if (inVal == selected.outInst) {
+          canPack = false;
+          break;
+        }
+      }
+      if (!canPack)
+        break;
+
+      for (const auto &inVal : selected.inVals) {
+        if (inVal == candidate.outInst) {
+          canPack = false;
+          break;
+        }
+      }
+      if (!canPack)
+        break;
     }
+    if (!canPack)
+      continue;
+
+    if (!isCandidateCompatibleWithTuple(candidate, tuple))
+      continue;
+
+    auto candidatesNextIt = std::next(candidatesIt);
+    tuple.push_back(candidate);
+    tuples.splice(tuples.end(),
+                  getAllTuples(candidatesNextIt, candidatesEnd, tuple));
+    tuple.pop_back();
   }
   if ((tuples.size() == 0) && (tuple.size() > 1))
     tuples.push_back(tuple);
@@ -413,36 +439,6 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
         break;
       }
     }
-    if (!canPack)
-      continue;
-    for (auto TI = tuple.begin(), TE = tuple.end(); TI != TE; ++TI) {
-      SILVIA::Candidate candidate = *TI;
-      // Check if a candidate uses other candidates within the tuple.
-      for (auto TJ = std::next(TI); TJ != TE; ++TJ) {
-        SILVIA::Candidate selected = *TJ;
-        for (const auto &inVal : candidate.inVals) {
-          if (inVal == selected.outInst) {
-            canPack = false;
-            break;
-          }
-        }
-        if (!canPack)
-          break;
-
-        for (const auto &inVal : selected.inVals) {
-          if (inVal == candidate.outInst) {
-            canPack = false;
-            break;
-          }
-        }
-        if (!canPack)
-          break;
-      }
-      if (!canPack) {
-        break;
-      }
-    }
-
     if (!canPack)
       continue;
 

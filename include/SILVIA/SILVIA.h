@@ -496,26 +496,12 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
     if (!canPack)
       continue;
 
+    DEBUG(dbgs() << "SILVIA::runOnBasicBlock: found a tuple of " << tuple.size()
+                 << " elements.\n");
+
     Instruction *lastDef = nullptr;
     Instruction *firstUse = nullptr;
     getDefsUsesInterval(tuple, lastDef, firstUse);
-
-    DenseMap<const Instruction *, int> instMap;
-    getInstMap(&BB, instMap);
-
-    if (firstUse && lastDef && (instMap[firstUse] <= instMap[lastDef])) {
-      for (const auto &candidate : tuple)
-        modified |= moveUsesALAP(candidate.outInst);
-    }
-
-    getDefsUsesInterval(tuple, lastDef, firstUse);
-    getInstMap(&BB, instMap);
-    // If firstUse is before lastDef this tuple is not valid.
-    if (firstUse && lastDef && (instMap[firstUse] <= instMap[lastDef]))
-      continue;
-
-    DEBUG(dbgs() << "SILVIA::runOnBasicBlock: found a tuple of " << tuple.size()
-                 << " elements.\n");
     auto insertBefore = (firstUse ? firstUse : BB.getTerminator());
     auto pack = packTuple(tuple, insertBefore, context);
 

@@ -374,8 +374,24 @@ bool SILVIA::getAllTuples(
     if (!isCandidateCompatibleWithTuple(candidate, tuple))
       continue;
 
-    auto candidatesNextIt = std::next(candidatesIt);
+    moveUsesALAP(candidate.outInst);
+
     tuple.push_back(candidate);
+
+    Instruction *lastDef = nullptr;
+    Instruction *firstUse = nullptr;
+    getDefsUsesInterval(tuple, lastDef, firstUse);
+
+    DenseMap<const Instruction *, int> instMap;
+    getInstMap(candidate.outInst->getParent(), instMap);
+
+    // If firstUse is before lastDef this tuple is not valid.
+    if (firstUse && lastDef && (instMap[firstUse] <= instMap[lastDef])) {
+      tuple.pop_back();
+      continue;
+    }
+
+    auto candidatesNextIt = std::next(candidatesIt);
     const auto tupledRecur = getAllTuples(candidatesNextIt, candidatesEnd,
                                           tuple, tupledCandidates, tuples);
     tupled |= tupledRecur;

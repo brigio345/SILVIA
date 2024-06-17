@@ -374,8 +374,6 @@ bool SILVIA::getAllTuples(
     if (!isCandidateCompatibleWithTuple(candidate, tuple))
       continue;
 
-    moveUsesALAP(candidate.outInst);
-
     tuple.push_back(candidate);
 
     Instruction *lastDef = nullptr;
@@ -461,6 +459,9 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
 
   if (candidateInsts.size() < 2)
     return false;
+
+  for (const auto &candidate : candidateInsts)
+    moveUsesALAP(candidate.outInst);
 
   auto tuples = getAllTuples(candidateInsts);
 

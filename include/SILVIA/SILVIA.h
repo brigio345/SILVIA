@@ -238,6 +238,8 @@ int SILVIA::getExtOpcode(Instruction *I) {
   int opcode = -1;
   for (unsigned i = 0; i < I->getNumOperands(); ++i) {
     const auto op = dyn_cast<Instruction>(I->getOperand(i));
+    if (!op)
+      return opcode;
     auto opOpcode = op->getOpcode();
     if (opOpcode == Instruction::SExt)
       return opOpcode;
@@ -452,8 +454,8 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   for (auto &candidate : candidateInsts) {
     std::sort(candidate.inVals.begin(), candidate.inVals.end(),
               [&](Value *a, Value *b) {
-                return instMap[cast<Instruction>(a)] <
-                       instMap[cast<Instruction>(b)];
+                return instMap[dyn_cast<Instruction>(a)] <
+                       instMap[dyn_cast<Instruction>(b)];
               });
   }
 

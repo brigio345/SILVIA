@@ -55,7 +55,11 @@ namespace eval SILVIA {
 				set instruction [dict get ${pass} INST]
 			}
 			exec ${LLVM_ROOT}/bin/llvm-link ${ROOT}/template/${op}/${op}.ll ${dut_path}/a.o.3.bc -o ${dut_path}/a.o.3.bc
-			set opt_cmd "${LLVM_ROOT}/bin/opt -strip-debug"
+			set opt_cmd ""
+			if {${DEBUG} == 1} {
+				append opt_cmd "time "
+			}
+			append opt_cmd "${LLVM_ROOT}/bin/opt -strip-debug"
 			if {${DEBUG} == 1} {
 				append opt_cmd " -debug"
 			}

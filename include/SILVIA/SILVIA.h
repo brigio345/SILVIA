@@ -462,84 +462,92 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   if (candidateInsts.size() < 2)
     return false;
 
-  for (const auto &candidate : candidateInsts)
-    moveUsesALAP(candidate.outInst);
-
-  auto tuples = getAllTuples(candidateInsts);
-
-  // Prioritize the tuples composed of larger amounts of candidates.
-  tuples.sort([&](SmallVector<SILVIA::Candidate, 4> &a,
-                  SmallVector<SILVIA::Candidate, 4> &b) {
-    if (a.size() > b.size())
-      return true;
-    if (a.size() < b.size())
-      return false;
-    return (instMap[a[0].outInst] < instMap[b[0].outInst]);
-  });
-
   bool modified = false;
+  bool packed = false;
 
   const auto numPackedTuplesBefore = numPackedTuples;
   const auto numPackedCandidatesBefore = numPackedCandidates;
 
-  std::unordered_set<SILVIA::Candidate, SILVIA::Candidate::Hash>
-      packedCandidates;
+  do {
+    for (const auto &candidate : candidateInsts)
+      moveUsesALAP(candidate.outInst);
 
-  // Pack the tuples not containing already packed candidates.
-  for (auto &tuple : tuples) {
-    auto canPack = true;
-    // TODO: Accept tuples containing non-packed candidates (?)
-    for (const auto &candidate : tuple) {
-      if (packedCandidates.count(candidate)) {
-        canPack = false;
-        break;
-      }
-    }
-    if (!canPack)
-      continue;
+    packed = false;
+    auto tuples = getAllTuples(candidateInsts);
 
-    DEBUG(dbgs() << "SILVIA::runOnBasicBlock: found a tuple of " << tuple.size()
-                 << " elements.\n");
+    // Prioritize the tuples composed of larger amounts of candidates.
+    tuples.sort([&](SmallVector<SILVIA::Candidate, 4> &a,
+                    SmallVector<SILVIA::Candidate, 4> &b) {
+      if (a.size() > b.size())
+        return true;
+      if (a.size() < b.size())
+        return false;
+      return (instMap[a[0].outInst] < instMap[b[0].outInst]);
+    });
 
-    Instruction *lastDef = nullptr;
-    Instruction *firstUse = nullptr;
-    getDefsUsesInterval(tuple, lastDef, firstUse);
-    auto insertBefore = (firstUse ? firstUse : BB.getTerminator());
-    auto pack = packTuple(tuple, insertBefore, context);
+    std::unordered_set<SILVIA::Candidate, SILVIA::Candidate::Hash>
+        packedCandidates;
 
-    if (!pack)
-      continue;
-
-    for (const auto &candidate : tuple)
-      packedCandidates.insert(candidate);
-
-    DEBUG(numPackedTuples++);
-    DEBUG(numPackedCandidates += tuple.size());
-    DEBUG(dbgs() << "SILVIA::runOnBasicBlock: packed a tuple of "
-                 << tuple.size() << " elements.\n");
-
-    IRBuilder<> builder(insertBefore);
-    for (unsigned i = 0; i < tuple.size(); ++i) {
-      std::string origName = tuple[i].outInst->getName();
-      Instruction *packedInst =
-          cast<Instruction>(builder.CreateExtractValue(pack, i));
-      for (auto &candidate : candidateInsts) {
-        for (auto &inVal : candidate.inVals) {
-          if (inVal == tuple[i].outInst)
-            inVal = packedInst;
+    // Pack the tuples not containing already packed candidates.
+    for (auto &tuple : tuples) {
+      auto canPack = true;
+      // TODO: Accept tuples containing non-packed candidates (?)
+      for (const auto &candidate : tuple) {
+        if (packedCandidates.count(candidate)) {
+          canPack = false;
+          break;
         }
       }
-      if (insertBefore == tuple[i].outInst) {
-        insertBefore = packedInst;
-        builder.SetInsertPoint(insertBefore);
-      }
-      tuple[i].outInst->replaceAllUsesWith(packedInst);
-      tuple[i].outInst->eraseFromParent();
-      packedInst->setName(origName);
-    }
+      if (!canPack)
+        continue;
 
-    modified = true;
-  }
+      DEBUG(dbgs() << "SILVIA::runOnBasicBlock: found a tuple of "
+                   << tuple.size() << " elements.\n");
+
+      Instruction *lastDef = nullptr;
+      Instruction *firstUse = nullptr;
+      getDefsUsesInterval(tuple, lastDef, firstUse);
+      auto insertBefore = (firstUse ? firstUse : BB.getTerminator());
+      auto pack = packTuple(tuple, insertBefore, context);
+
+      if (!pack)
+        continue;
+
+      for (const auto &candidate : tuple)
+        packedCandidates.insert(candidate);
+
+      DEBUG(numPackedTuples++);
+      DEBUG(numPackedCandidates += tuple.size());
+      DEBUG(dbgs() << "SILVIA::runOnBasicBlock: packed a tuple of "
+                   << tuple.size() << " elements.\n");
+
+      IRBuilder<> builder(insertBefore);
+      for (unsigned i = 0; i < tuple.size(); ++i) {
+        std::string origName = tuple[i].outInst->getName();
+        Instruction *packedInst =
+            cast<Instruction>(builder.CreateExtractValue(pack, i));
+        for (auto &candidate : candidateInsts) {
+          for (auto &inVal : candidate.inVals) {
+            if (inVal == tuple[i].outInst)
+              inVal = packedInst;
+          }
+        }
+        if (insertBefore == tuple[i].outInst) {
+          insertBefore = packedInst;
+          builder.SetInsertPoint(insertBefore);
+        }
+        tuple[i].outInst->replaceAllUsesWith(packedInst);
+        tuple[i].outInst->eraseFromParent();
+        packedInst->setName(origName);
+      }
+
+      for (const auto &candidate : tuple)
+        candidateInsts.remove(candidate);
+
+      modified = true;
+      packed = true;
+    }
+  } while (packed && (candidateInsts.size() > 0));
 
   DEBUG(if (numPackedTuples > numPackedTuplesBefore) {
     dbgs() << "SILVIA::runOnBasicBlock(" << BB.getName() << " @ "

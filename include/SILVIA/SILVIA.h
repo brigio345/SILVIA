@@ -151,6 +151,7 @@ bool mayHaveSideEffects(Function *F) {
   auto FName = F->getName();
   return (!(FName.startswith("_silvia") ||
             FName.startswith("llvm.dbg.value") ||
+            FName.startswith("_ssdm_op_Spec") ||
             FName.startswith("_ssdm_op_SparseMux") ||
             FName.startswith("_ssdm_op_BitSelect") ||
             FName.startswith("_ssdm_op_BitConcatenate") ||

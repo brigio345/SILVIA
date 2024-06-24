@@ -29,7 +29,11 @@ struct SILVIA : public BasicBlockPass {
     Instruction *outInst;
 
     bool operator==(const Candidate &other) const {
-      return ((inVals == other.inVals) && (outInst == other.outInst));
+      return (outInst == other.outInst);
+    }
+
+    bool operator!=(const Candidate &other) const {
+      return (!(*this == other));
     }
 
     struct Hash {

@@ -548,7 +548,7 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
       modified = true;
       packed = true;
     }
-  } while (packed && (candidateInsts.size() > 0));
+  } while (packed && (candidateInsts.size() > 1));
 
   DEBUG(if (numPackedTuples > numPackedTuplesBefore) {
     dbgs() << "SILVIA::runOnBasicBlock(" << BB.getName() << " @ "

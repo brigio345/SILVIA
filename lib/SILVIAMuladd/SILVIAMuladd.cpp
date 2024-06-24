@@ -576,7 +576,7 @@ Value *SILVIAMuladd::packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
     rootStruct = builder.CreateInsertValue(rootStruct, sums[i], i);
 
   InlineFunctionInfo IFI;
-  if (SILVIAMuladdInline ||
+  if ((SILVIAMuladdInline && (SILVIAMuladdOpSize == 8)) ||
       ((SILVIAMuladdOpSize == 4) && (MulAdd == MulAddUnsign))) {
     for (const auto &P : mulAddCalls)
       InlineFunction(P, IFI);

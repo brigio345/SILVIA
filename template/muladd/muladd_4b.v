@@ -33,7 +33,7 @@
 
 `timescale 1 ns / 1 ps 
 
-module mvu_4sx4u #(
+module {{module_name}}_mvu_4sx4u #(
 	int unsigned  PE = 4,
 	int unsigned  SIMD = 1,
 	int unsigned  ACCU_WIDTH = 8,
@@ -526,7 +526,7 @@ module mvu_4sx4u #(
 
 	end : genPipes
 
-endmodule : mvu_4sx4u
+endmodule : {{module_name}}_mvu_4sx4u
 
 module {{module_name}} (
     input   ap_clk,
@@ -559,7 +559,7 @@ module {{module_name}} (
 
     assign ap_return = {p[0], p[1], p[2], p[3]};
 
-    mvu_4sx4u #(
+    {{module_name}}_mvu_4sx4u #(
         .PE(PE),
         .SIMD(SIMD),
         .ACCU_WIDTH(ACCU_WIDTH),

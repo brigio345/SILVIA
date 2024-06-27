@@ -1,5 +1,5 @@
 ## Overview:
-SILVIA is a set of LLVM transformation passes to automatically identify superword-level parallelism within an HLS FPGA design and exploits it by packing multiple operations, such as additions, multiplications, and multiply-and-adds, into a single DSP.
+SILVIA is a set of LLVM transformation passes to automatically identify superword-level parallelism within an HLS FPGA design and exploit it by packing multiple operations, such as additions, multiplications, and multiply-and-adds, into a single DSP.
 
 ## Build:
 Build and install LLVM 3.1:

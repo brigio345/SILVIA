@@ -40,7 +40,6 @@ namespace eval SILVIA {
 		set dut_path ${db_path}/dut
 		file mkdir ${dut_path}
 		exec unzip -o -d ${dut_path} ${project_path}/${solution_name}_FE/.autopilot/db/dut.hcp
-		set ::env(LD_LIBRARY_PATH) "${LLVM_ROOT}/lib/:$::env(LD_LIBRARY_PATH)"
 		if {${DEBUG} == 1} {
 			file delete ${DEBUG_FILE}
 		}
@@ -54,8 +53,8 @@ namespace eval SILVIA {
 			if {[dict exist ${pass} INST]} {
 				set instruction [dict get ${pass} INST]
 			}
-			exec ${LLVM_ROOT}/bin/llvm-link ${ROOT}/template/${op}/${op}.ll ${dut_path}/a.o.3.bc -o ${dut_path}/a.o.3.bc
-			set opt_cmd ""
+			exec env LD_LIBRARY_PATH=${LLVM_ROOT}/lib ${LLVM_ROOT}/bin/llvm-link ${ROOT}/template/${op}/${op}.ll ${dut_path}/a.o.3.bc -o ${dut_path}/a.o.3.bc
+			set opt_cmd "env LD_LIBRARY_PATH=${LLVM_ROOT}/lib "
 			if {${DEBUG} == 1} {
 				append opt_cmd "time "
 			}

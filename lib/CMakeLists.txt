@@ -17,5 +17,4 @@ link_directories(${LLVM_LIBRARY_DIRS})
 include_directories(../include)
 add_subdirectory(SILVIAAdd)
 add_subdirectory(SILVIAMuladd)
-add_subdirectory(BBToDot)
 

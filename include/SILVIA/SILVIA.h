@@ -145,8 +145,7 @@ Instruction *getFirstValueUse(Instruction *inst) {
 
 bool mayHaveSideEffects(Function *F) {
   auto FName = F->getName();
-  return (!(FName.startswith("_silvia") ||
-            FName.startswith("llvm.dbg.value") ||
+  return (!(FName.startswith("_silvia") || FName.startswith("llvm.dbg.value") ||
             FName.startswith("_ssdm_op_Spec") ||
             FName.startswith("_ssdm_op_SparseMux") ||
             FName.startswith("_ssdm_op_BitSelect") ||
@@ -440,9 +439,9 @@ bool SILVIA::runOnBasicBlock(BasicBlock &BB) {
   AA = &getAnalysis<AliasAnalysis>();
 
   std::list<SILVIA::Candidate> candidateInsts = getCandidates(BB);
-  DEBUG(if (candidateInsts.size() > 0) dbgs() << "SILVIA::getCandidates: found "
-                                              << candidateInsts.size()
-                                              << " candidates.\n");
+  DEBUG(if (candidateInsts.size() > 0) dbgs()
+        << "SILVIA::getCandidates: found " << candidateInsts.size()
+        << " candidates.\n");
 
   // Sorting the input values of each candidate empirically proved to result in
   // a larger number of packs.

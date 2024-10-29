@@ -608,7 +608,8 @@ bool SILVIAMuladd::runOnBasicBlock(BasicBlock &BB) {
   Module *module = BB.getParent()->getParent();
 
   MulAddSign = module->getFunction(
-      "_silvia_muladd" + std::string((SILVIAMuladdOpSize == 4) ? "_signed" : "") +
+      "_silvia_muladd" +
+      std::string((SILVIAMuladdOpSize == 4) ? "_signed" : "") +
       std::string(((SILVIAMuladdOpSize == 8) && SILVIAMuladdInline) ? "_inline_"
                                                                     : "_") +
       std::to_string(SILVIAMuladdOpSize) + "b");

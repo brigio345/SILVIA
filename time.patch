@@ -1,0 +1,38 @@
+diff --git a/cmake/config-ix.cmake b/cmake/config-ix.cmake
+index f6eeea9..d9464d3 100755
+--- a/cmake/config-ix.cmake
++++ b/cmake/config-ix.cmake
+@@ -82,6 +82,20 @@ check_include_file(fenv.h HAVE_FENV_H)
+ check_include_file(mach/mach.h HAVE_MACH_MACH_H)
+ check_include_file(mach-o/dyld.h HAVE_MACH_O_DYLD_H)
+ 
++if(HAVE_SYS_TIME_H)
++  CHECK_CXX_SOURCE_COMPILES("
++    #include <sys/time.h>
++    #include <time.h>
++
++    int main(){
++      char buffer[32];
++      time_t ourTime;
++      ::asctime_r(::localtime(&ourTime), buffer);
++      return 0;
++    }"
++    TIME_WITH_SYS_TIME)
++endif()
++
+ # library checks
+ if( NOT PURE_WINDOWS )
+   check_library_exists(pthread pthread_create "" HAVE_LIBPTHREAD)
+diff --git a/include/llvm/Config/config.h.cmake b/include/llvm/Config/config.h.cmake
+index e50bff5..c42a584 100644
+--- a/include/llvm/Config/config.h.cmake
++++ b/include/llvm/Config/config.h.cmake
+@@ -672,7 +672,7 @@
+ #undef STDC_HEADERS
+ 
+ /* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */
+-#undef TIME_WITH_SYS_TIME
++#cmakedefine TIME_WITH_SYS_TIME ${TIME_WITH_SYS_TIME}
+ 
+ /* Define to 1 if your <sys/time.h> declares `struct tm'. */
+ #undef TM_IN_SYS_TIME

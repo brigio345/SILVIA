@@ -1,9 +1,14 @@
 pushd `pwd`
 cd llvm-project
+
+if patch --dry-run -p1 -d llvm < ../time.patch > /dev/null 2>&1; then
+	patch -p1 -d llvm < ../time.patch
+fi
+
 mkdir -p build
 mkdir -p install
 cd build
-export LD_LIBRARY_PATH=${XILINX_VITIS}/tps/lnx64/cmake-3.24.2/libs/Ubuntu:${XILINX_VITIS}/lib/lnx64.o/Ubuntu:${LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH=${XILINX_VITIS}/tps/lnx64/cmake-3.24.2/libs/Ubuntu:${LD_LIBRARY_PATH}
 ${XILINX_VITIS}/tps/lnx64/cmake-3.24.2/bin/cmake \
 	-DCMAKE_INSTALL_PREFIX=`pwd`/../install \
 	-DCMAKE_CXX_FLAGS="-w -std=c++98" \

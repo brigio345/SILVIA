@@ -64,9 +64,7 @@ struct SILVIA : public BasicBlockPass {
   static Value *getUnextendedValue(Value *V);
   static int getExtOpcode(Instruction *I);
 
-  virtual std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) {
-    return std::list<SILVIA::Candidate>();
-  }
+  virtual std::list<SILVIA::Candidate> getCandidates(BasicBlock &BB) = 0;
   bool moveUsesALAP(Instruction *inst);
   bool moveUsesALAP(Instruction *inst, bool postponeInst,
                     DenseSet<Instruction *> &postponed);
@@ -75,16 +73,10 @@ struct SILVIA : public BasicBlockPass {
                                     Instruction *lastInst);
   virtual bool
   isCandidateCompatibleWithTuple(SILVIA::Candidate &candidate,
-                                 SmallVector<SILVIA::Candidate, 4> &tuple) {
-    return false;
-  }
-  virtual bool isTupleFull(SmallVector<SILVIA::Candidate, 4> &tuple) {
-    return true;
-  }
+                                 SmallVector<SILVIA::Candidate, 4> &tuple) = 0;
+  virtual bool isTupleFull(SmallVector<SILVIA::Candidate, 4> &tuple) = 0;
   virtual Value *packTuple(SmallVector<SILVIA::Candidate, 4> instTuple,
-                           Instruction *insertBefore, LLVMContext &context) {
-    return nullptr;
-  }
+                           Instruction *insertBefore, LLVMContext &context) = 0;
   virtual void printReport() {
     DEBUG(dbgs() << "SILVIA::printReport: packed " << numPackedTuples
                  << " tuples (" << numPackedCandidates << " candidates).\n");

@@ -1,4 +1,5 @@
 pushd `pwd`
+git submodule update --init --recursive
 cd llvm-project
 
 if patch --dry-run -p1 -d llvm < ../time.patch > /dev/null 2>&1; then

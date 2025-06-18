@@ -12,7 +12,6 @@
 void core(const weight_t weights[CI][CO][KSZ * KSZ],
           hls::stream<Tensor2d<data_t, KSZ, KSZ>> &s0,
           hls::stream<Tensor1d<act_t, SIMD>> &s1) {
-#pragma HLS inline
   spkconv2d_int<data_t, weight_t, HO, WO, CI, CO, KSZ, SIMD>(weights, s0, s1);
 }
 

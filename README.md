@@ -4,7 +4,7 @@ It currently supports AMD Vitis HLS.
 ## Prerequisites
 Install [AMD Vitis](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/vitis.html) and set it up via:
 ```bash
-source ${INSTALL_PATH}/Vitis/${VERSION}/settings.sh
+source ${INSTALL_PATH}/Vitis/${VERSION}/settings64.sh
 ```
 Where `${INSTALL_PATH}` is the installation path of Vitis (e.g., `/opt/Xilinx`) and `${VERSION}` is the version of Vitis (e.g., `2024.1`).
 
